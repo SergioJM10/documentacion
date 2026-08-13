@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Portal de documentos y gastos — borrador v3</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script id="tailwind-config">
+tailwind.config = { theme: { extend: {
+  colors: {"on-primary":"#ffffff","error":"#ba1a1a","on-tertiary-fixed-variant":"#524600","on-secondary-container":"#606569","on-secondary-fixed-variant":"#42474b","on-tertiary":"#ffffff","tertiary-fixed":"#f9e37a","secondary-container":"#dfe3e8","background":"#faf9fa","primary-container":"#3366cc","on-background":"#1b1c1d","surface-container-high":"#e9e8e9","on-secondary":"#ffffff","secondary":"#5a5f63","surface-container-lowest":"#ffffff","tertiary-fixed-dim":"#dcc661","outline":"#737784","tertiary-container":"#bfab49","primary-fixed-dim":"#b1c5ff","surface-bright":"#faf9fa","on-primary-container":"#e7ebff","surface-container-low":"#f5f3f4","on-surface":"#1b1c1d","secondary-fixed-dim":"#c2c7cc","outline-variant":"#c3c6d5","primary-fixed":"#d9e2ff","on-tertiary-fixed":"#211b00","on-primary-fixed":"#001946","inverse-surface":"#303031","on-tertiary-container":"#4a3f00","secondary-fixed":"#dfe3e8","surface-variant":"#e3e2e3","error-container":"#ffdad6","on-surface-variant":"#434653","surface-container":"#efedee","surface-dim":"#dbdadb","surface-tint":"#2259bf","surface":"#faf9fa","surface-container-highest":"#e3e2e3","primary":"#094cb2","on-primary-fixed-variant":"#00419d","inverse-primary":"#b1c5ff","on-error":"#ffffff","tertiary":"#6d5e00","on-secondary-fixed":"#171c20","on-error-container":"#93000a","inverse-on-surface":"#f2f0f1"},
+  borderRadius: {"DEFAULT":"0.125rem","lg":"0.25rem","xl":"0.5rem","full":"0.75rem"},
+  fontFamily: {"headline":["Noto Serif"],"display":["Noto Serif"],"body":["Inter"],"label":["Public Sans"]}
+}}}
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Noto+Serif:wght@100..900&family=Public+Sans:wght@100..900&display=swap" rel="stylesheet">
+<style>
+  .material-symbols-outlined { font-family: 'Material Symbols Outlined'; font-weight: normal; font-style: normal; font-size: 20px; line-height: 1; display: inline-block; white-space: nowrap; vertical-align: middle; }
+  body { margin: 0; }
+  .screen { display: none; }
+  .screen.visible { display: block; }
+  .sub { display: none; }
+  .sub.visible { display: block; }
+  .field-error { border-color: #ba1a1a !important; background: #ffdad6 !important; }
+</style>
+</head>
+<body class="bg-background font-body text-on-surface">
+
+<div style="background:#1b1c1d;color:#e3e2e3;padding:10px 20px;display:flex;align-items:center;gap:16px;font-size:12px;font-family:sans-serif;">
+  <span style="color:#9CA79E;letter-spacing:0.05em;text-transform:uppercase;font-size:11px;">Borrador v3 — vista previa</span>
+  <button id="nav-login" onclick="showScreen('login')" style="background:none;border:1px solid #3A453E;color:#D6DBD3;padding:6px 14px;border-radius:20px;font-size:12px;cursor:pointer;">Login</button>
+  <button id="nav-admin" onclick="showScreen('admin')" style="background:none;border:1px solid #3A453E;color:#D6DBD3;padding:6px 14px;border-radius:20px;font-size:12px;cursor:pointer;">Panel admin</button>
+  <button id="nav-upload" onclick="showScreen('upload')" style="background:none;border:1px solid #3A453E;color:#D6DBD3;padding:6px 14px;border-radius:20px;font-size:12px;cursor:pointer;">Subir documento</button>
+</div>
+
+<!-- LOGIN -->
+<div id="screen-login" class="screen">
+  <div class="min-h-[90vh] flex items-center justify-center px-6">
+    <div class="w-full max-w-sm">
+      <div class="mb-10 text-center">
+        <h1 class="text-3xl font-headline font-bold text-primary tracking-tight">Portal de documentos</h1>
+        <p class="text-[11px] font-label uppercase tracking-widest text-tertiary mt-1">Documentos y gastos</p>
+      </div>
+      <div class="bg-surface-container-lowest rounded-3xl shadow-sm p-8 flex flex-col gap-5">
+        <div>
+          <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-semibold">Correo</label>
+          <input id="login-email" type="email" placeholder="nombre@empresa.com" class="w-full mt-2 bg-surface-container-low rounded-xl p-3.5 text-sm outline-none focus:ring-2 focus:ring-primary/40">
+        </div>
+        <div>
+          <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-semibold">Contraseña</label>
+          <input id="login-password" type="password" placeholder="••••••••" class="w-full mt-2 bg-surface-container-low rounded-xl p-3.5 text-sm outline-none focus:ring-2 focus:ring-primary/40">
+        </div>
+        <div id="login-error" class="hidden text-sm text-error bg-error-container/40 rounded-xl px-4 py-3 flex items-center gap-2">
+          <span class="material-symbols-outlined text-[18px]">error</span>
+          <span id="login-error-text"></span>
+        </div>
+        <button id="login-btn" onclick="handleLogin()" class="w-full mt-2 py-3.5 rounded-xl bg-primary text-on-primary font-label font-semibold text-sm hover:bg-primary-container transition-colors">Iniciar sesión</button>
+        <a href="#" class="text-xs text-on-surface-variant text-center hover:text-primary transition-colors">¿Olvidaste tu contraseña?</a>
+      </div>
+      <p class="text-center text-xs text-on-surface-variant mt-6">¿Solo vas a subir un documento? <a onclick="showScreen('upload')" class="text-primary font-medium cursor-pointer">Ir directo al formulario →</a></p>
+    </div>
+  </div>
+</div>
+
+<!-- ADMIN SHELL -->
+<div id="screen-admin" class="screen">
+  <aside class="fixed left-0 top-0 h-full w-72 bg-surface-container-low z-50 flex flex-col pt-8 pb-10 shadow-[4px_0_24px_rgba(0,0,0,0.02)] overflow-y-auto">
+    <div class="px-10 mb-8">
+      <h1 class="text-2xl font-headline font-bold text-primary tracking-tight">Portal</h1>
+      <p class="text-[10px] font-label uppercase tracking-widest text-tertiary mt-1">Documentos y gastos</p>
+    </div>
+    <nav class="flex-1 px-4 space-y-1">
+      <p class="px-6 pt-2 pb-1 text-[10px] font-label uppercase tracking-widest text-on-surface-variant/60">Documentos</p>
+      <a onclick="showSub('dashboard')" id="side-dashboard" class="cursor-pointer flex items-center px-6 py-3.5 rounded-xl transition-all duration-300"><span class="material-symbols-outlined mr-4">dashboard</span><span class="text-sm font-label">Dashboard</span></a>
+      <a onclick="showSub('empresas')" id="side-empresas" class="cursor-pointer flex items-center px-6 py-3.5 rounded-xl transition-all duration-300"><span class="material-symbols-outlined mr-4">apartment</span><span class="text-sm font-label">Empresas</span></a>
+      <a onclick="showSub('config')" id="side-config" class="cursor-pointer flex items-center px-6 py-3.5 rounded-xl transition-all duration-300"><span class="material-symbols-outlined mr-4">settings</span><span class="text-sm font-label">Configuración</span></a>
+
+      <p class="px-6 pt-5 pb-1 text-[10px] font-label uppercase tracking-widest text-on-surface-variant/60">Gastos</p>
+      <a onclick="showSub('captura')" id="side-captura" class="cursor-pointer flex items-center px-6 py-3.5 rounded-xl transition-all duration-300"><span class="material-symbols-outlined mr-4">receipt_long</span><span class="text-sm font-label">Registrar gasto</span></a>
+      <a onclick="showSub('checklist')" id="side-checklist" class="cursor-pointer flex items-center px-6 py-3.5 rounded-xl transition-all duration-300"><span class="material-symbols-outlined mr-4">checklist</span><span class="text-sm font-label">Checklist de pago</span></a>
+      <a onclick="showSub('historial')" id="side-historial" class="cursor-pointer flex items-center px-6 py-3.5 rounded-xl transition-all duration-300"><span class="material-symbols-outlined mr-4">history</span><span class="text-sm font-label">Historial</span></a>
+    </nav>
+    <div class="px-8 pt-6 border-t border-outline-variant/10">
+      <div class="flex items-center gap-3 p-3 rounded-2xl bg-surface-container-lowest shadow-sm">
+        <div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div>
+        <div class="flex-1 min-w-0">
+          <p id="user-name" class="text-xs font-bold text-on-surface truncate">—</p>
+          <p id="user-role" class="text-[10px] text-on-surface-variant truncate">—</p>
+        </div>
+        <a onclick="handleLogout()" class="cursor-pointer material-symbols-outlined text-[16px] text-on-surface-variant hover:text-primary">logout</a>
+      </div>
+    </div>
+  </aside>
+
+  <div class="pl-72">
+    <header class="fixed top-0 left-72 right-0 h-20 bg-surface/80 backdrop-blur-xl z-40 flex items-center justify-between px-12">
+      <div class="flex items-center gap-4 text-on-surface-variant">
+        <span class="material-symbols-outlined text-[20px]">search</span>
+        <input placeholder="Buscar empresa, gasto o documento..." class="bg-transparent border-none focus:ring-0 text-sm font-label w-64 placeholder:text-outline-variant">
+      </div>
+      <div class="flex items-center gap-6">
+        <button class="text-on-surface-variant hover:text-primary transition-colors"><span class="material-symbols-outlined">notifications</span></button>
+        <button class="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-full text-xs font-label hover:bg-primary-container transition-all duration-300 shadow-lg shadow-primary/10"><span class="material-symbols-outlined text-[18px]">add</span>Nueva empresa</button>
+      </div>
+    </header>
+
+    <main class="relative pt-20 min-h-screen">
+      <div class="px-12 py-10">
+
+        <!-- SUBVIEW: DASHBOARD (documentos) -->
+        <div id="sub-dashboard" class="sub">
+          <h2 class="text-4xl font-headline font-bold text-on-surface tracking-tight mb-1">Seguimiento general</h2>
+          <p class="text-sm text-on-surface-variant mb-8">Avance de recolección documental del ciclo actual, por razón social.</p>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+            <div class="bg-surface-container-lowest rounded-3xl p-6 shadow-sm flex items-center justify-between">
+              <div><p class="text-xs font-label uppercase tracking-widest text-on-surface-variant mb-1">Empresas al día</p><p class="text-3xl font-headline font-bold text-on-surface" id="kpi-al-dia">—</p></div>
+              <div class="w-12 h-12 rounded-full bg-primary-container/20 flex items-center justify-center"><span class="material-symbols-outlined text-primary">task_alt</span></div>
+            </div>
+            <div class="bg-surface-container-lowest rounded-3xl p-6 shadow-sm flex items-center justify-between">
+              <div><p class="text-xs font-label uppercase tracking-widest text-on-surface-variant mb-1">Documentos pendientes</p><p class="text-3xl font-headline font-bold text-on-surface" id="kpi-pendientes">—</p></div>
+              <div class="w-12 h-12 rounded-full bg-tertiary-container/30 flex items-center justify-center"><span class="material-symbols-outlined text-tertiary">pending_actions</span></div>
+            </div>
+            <div class="bg-surface-container-lowest rounded-3xl p-6 shadow-sm flex items-center justify-between">
+              <div><p class="text-xs font-label uppercase tracking-widest text-on-surface-variant mb-1">Documentos atrasados</p><p class="text-3xl font-headline font-bold text-error" id="kpi-atrasados">—</p></div>
+              <div class="w-12 h-12 rounded-full bg-error-container flex items-center justify-center"><span class="material-symbols-outlined text-error">warning</span></div>
+            </div>
+          </div>
+
+          <h3 class="text-xl font-headline font-semibold text-on-surface mb-4">Avance por razón social</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="rs-breakdown"></div>
+        </div>
+
+        <!-- SUBVIEW: EMPRESAS (documentos) -->
+        <div id="sub-empresas" class="sub">
+          <h2 class="text-4xl font-headline font-bold text-on-surface tracking-tight mb-1">Empresas</h2>
+          <p class="text-sm text-on-surface-variant mb-6">Filtra por razón social y revisa el detalle de cada periodo.</p>
+
+          <div class="flex gap-2 mb-6" id="rs-tabs">
+            <button onclick="filterRS('todas')" id="tab-todas" class="px-5 py-2.5 rounded-full font-label text-xs font-semibold transition-colors">Todas</button>
+            <button onclick="filterRS('P')" id="tab-P" class="px-5 py-2.5 rounded-full font-label text-xs font-semibold transition-colors">Razón social P</button>
+            <button onclick="filterRS('H')" id="tab-H" class="px-5 py-2.5 rounded-full font-label text-xs font-semibold transition-colors">Razón social H</button>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8" id="grid"></div>
+          <div class="w-full rounded-[2rem] bg-surface-container-lowest shadow-sm overflow-hidden" id="detail"></div>
+        </div>
+
+        <!-- SUBVIEW: CONFIG -->
+        <div id="sub-config" class="sub">
+          <h2 class="text-4xl font-headline font-bold text-on-surface tracking-tight mb-1">Configuración</h2>
+          <p class="text-sm text-on-surface-variant mb-8">Aquí se administran las plantillas de documentos por empresa: qué se pide, con qué frecuencia y quién es responsable.</p>
+          <div class="bg-surface-container-lowest rounded-3xl p-10 shadow-sm text-center text-on-surface-variant text-sm">
+            Editor de plantillas — próxima sección de este borrador.
+          </div>
+        </div>
+
+        <!-- SUBVIEW: CAPTURA (gastos) -->
+        <div id="sub-captura" class="sub">
+          <div class="max-w-2xl">
+            <p class="text-xs font-label uppercase tracking-widest text-tertiary mb-1">Registrar gasto</p>
+            <h2 class="text-4xl font-headline font-bold text-on-surface tracking-tight mb-1">Nuevo gasto</h2>
+            <p class="text-sm text-on-surface-variant mb-8">Los campos marcados con * son obligatorios para poder pagar este gasto después.</p>
+
+            <div class="bg-surface-container-lowest rounded-3xl shadow-sm p-8 flex flex-col gap-5">
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-semibold">Marca *</label>
+                  <select id="f-marca" class="w-full mt-2 bg-surface-container-low rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40">
+                    <option>Marca A</option><option>Marca B</option><option>Marca C</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-semibold">Rubro *</label>
+                  <select id="f-rubro" class="w-full mt-2 bg-surface-container-low rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40">
+                    <option value="">Selecciona...</option>
+                    <option>Nóminas</option><option>Gasolina</option><option>Renta</option><option>Marketing</option><option>Insumos</option><option>Otro</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-semibold">Concepto *</label>
+                <input id="f-concepto" type="text" placeholder="Ej. Renta de bodega agosto" class="w-full mt-2 bg-surface-container-low rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40">
+              </div>
+
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-semibold">Monto *</label>
+                  <input id="f-monto" type="number" placeholder="0.00" class="w-full mt-2 bg-surface-container-low rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40">
+                </div>
+                <div>
+                  <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-semibold">Fecha límite de pago</label>
+                  <input type="date" class="w-full mt-2 bg-surface-container-low rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40">
+                </div>
+              </div>
+
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-semibold">Proveedor · nombre comercial</label>
+                  <input id="f-nombre-comercial" type="text" placeholder="Ej. Gasolinera del Centro" class="w-full mt-2 bg-surface-container-low rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40">
+                </div>
+                <div>
+                  <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-semibold">Proveedor · razón social *</label>
+                  <input id="f-razon-social" type="text" placeholder="Ej. Combustibles del Bajío SA de CV" class="w-full mt-2 bg-surface-container-low rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40">
+                </div>
+              </div>
+
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-semibold">Método de pago (SAT) *</label>
+                  <select id="f-metodo" onchange="gastosToggleRep()" class="w-full mt-2 bg-surface-container-low rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40">
+                    <option value="">Selecciona...</option>
+                    <option value="PUE">PUE — pago en una sola exhibición</option>
+                    <option value="PPD">PPD — pago en parcialidades o diferido</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-semibold">Factura (folio)</label>
+                  <input id="f-factura" type="text" placeholder="Opcional" class="w-full mt-2 bg-surface-container-low rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40">
+                </div>
+              </div>
+
+              <div id="rep-wrap" style="display:none;">
+                <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-semibold">REP · Recibo Electrónico de Pago *</label>
+                <input id="f-rep" type="text" placeholder="Obligatorio en PPD" class="w-full mt-2 bg-surface-container-low rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40">
+                <p class="text-xs text-tertiary mt-1.5 flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">info</span>Obligatorio porque el pago es PPD.</p>
+              </div>
+
+              <div>
+                <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-semibold">Notas</label>
+                <textarea rows="2" placeholder="Opcional" class="w-full mt-2 bg-surface-container-low rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40"></textarea>
+              </div>
+
+              <div id="form-error" class="hidden text-sm text-error bg-error-container/40 rounded-xl px-4 py-3 flex items-center gap-2">
+                <span class="material-symbols-outlined text-[18px]">error</span>
+                <span id="form-error-text"></span>
+              </div>
+
+              <button onclick="gastosValidarCaptura()" class="w-full py-3.5 rounded-xl bg-primary text-on-primary font-label font-semibold text-sm hover:bg-primary-container transition-colors">Registrar gasto</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- SUBVIEW: CHECKLIST (gastos) -->
+        <div id="sub-checklist" class="sub">
+          <p class="text-xs font-label uppercase tracking-widest text-tertiary mb-1">Gastos por pagar · mes actual</p>
+          <h2 class="text-4xl font-headline font-bold text-on-surface tracking-tight mb-1">Checklist de pago</h2>
+          <p class="text-sm text-on-surface-variant mb-6">Marca cada gasto como pagado conforme lo vayas procesando.</p>
+
+          <div class="flex items-center justify-between mb-6">
+            <div class="flex gap-2" id="marca-tabs"></div>
+            <button onclick="gastosGenerarCorte()" class="flex items-center gap-2 px-4 py-2 rounded-full bg-surface-container-high text-on-surface font-label text-xs hover:bg-surface-container-highest transition-colors"><span class="material-symbols-outlined text-[16px]">summarize</span>Generar corte de mes</button>
+          </div>
+
+          <div class="bg-surface-container-lowest rounded-2xl shadow-sm p-5 flex items-center justify-between mb-6 max-w-lg">
+            <div>
+              <p class="text-xs font-label uppercase tracking-widest text-on-surface-variant">Pendiente de pagar</p>
+              <p class="text-2xl font-headline font-bold text-on-surface" id="total-pendiente">—</p>
+            </div>
+            <div class="text-right">
+              <p class="text-xs font-label uppercase tracking-widest text-on-surface-variant">Listos para pagar</p>
+              <p class="text-2xl font-headline font-bold text-primary" id="cuenta-listos">—</p>
+            </div>
+          </div>
+
+          <div id="lista-gastos" class="flex flex-col gap-3 max-w-3xl"></div>
+
+          <div id="corte-resumen" class="hidden mt-8 bg-surface-container-lowest rounded-2xl shadow-sm p-6 max-w-3xl">
+            <h3 class="font-headline font-semibold text-lg mb-3">Resumen del corte</h3>
+            <div id="corte-resumen-body" class="text-sm text-on-surface-variant"></div>
+          </div>
+        </div>
+
+        <!-- SUBVIEW: HISTORIAL (gastos) -->
+        <div id="sub-historial" class="sub">
+          <p class="text-xs font-label uppercase tracking-widest text-tertiary mb-1">Historial mensual</p>
+          <h2 class="text-4xl font-headline font-bold text-on-surface tracking-tight mb-1">Historial de gastos</h2>
+          <p class="text-sm text-on-surface-variant mb-6">Lo mismo que ver una pestaña de mes distinta en el Excel — todo lo registrado y pagado, mes por mes.</p>
+
+          <div class="flex gap-2 mb-4" id="mes-tabs"></div>
+          <div class="flex gap-2 mb-6" id="marca-tabs-hist"></div>
+
+          <div class="grid grid-cols-3 gap-4 mb-6 max-w-2xl">
+            <div class="bg-surface-container-lowest rounded-2xl p-5 shadow-sm">
+              <p class="text-xs font-label uppercase tracking-widest text-on-surface-variant mb-1">Registrado</p>
+              <p class="text-xl font-headline font-bold text-on-surface" id="hist-total-registrado">—</p>
+            </div>
+            <div class="bg-surface-container-lowest rounded-2xl p-5 shadow-sm">
+              <p class="text-xs font-label uppercase tracking-widest text-on-surface-variant mb-1">Pagado</p>
+              <p class="text-xl font-headline font-bold text-primary" id="hist-total-pagado">—</p>
+            </div>
+            <div class="bg-surface-container-lowest rounded-2xl p-5 shadow-sm">
+              <p class="text-xs font-label uppercase tracking-widest text-on-surface-variant mb-1">Pendiente</p>
+              <p class="text-xl font-headline font-bold text-error" id="hist-total-pendiente">—</p>
+            </div>
+          </div>
+
+          <h3 class="font-headline font-semibold text-sm text-on-surface-variant uppercase tracking-widest mb-3">Desglose por rubro</h3>
+          <div id="hist-rubros" class="flex flex-wrap gap-2 mb-8"></div>
+
+          <h3 class="font-headline font-semibold text-sm text-on-surface-variant uppercase tracking-widest mb-3">Detalle</h3>
+          <div id="hist-lista" class="flex flex-col gap-2 max-w-3xl"></div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- UPLOAD (documento, responsable externo) -->
+<div id="screen-upload" class="screen">
+  <div class="min-h-[90vh] flex flex-col items-center justify-center px-6">
+    <div class="w-full max-w-md">
+      <div class="bg-surface-container-lowest rounded-3xl shadow-sm p-8">
+        <p class="text-xs font-label uppercase tracking-widest text-on-surface-variant mb-1">Empresa A · Agosto 2026</p>
+        <h2 class="text-2xl font-headline font-bold text-on-surface mb-2">Pago</h2>
+        <p class="text-sm font-medium text-tertiary mb-6 flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">schedule</span>Vence el 15 de agosto</p>
+
+        <div id="dropzone" onclick="document.getElementById('file').click()" class="relative group/drop cursor-pointer rounded-2xl border-2 border-dashed border-outline-variant/40 hover:border-primary/50 transition-colors py-14 px-6 text-center">
+          <div class="w-16 h-16 rounded-full bg-surface-container-low flex items-center justify-center mx-auto mb-4">
+            <span class="material-symbols-outlined text-3xl text-primary">cloud_upload</span>
+          </div>
+          <p class="text-sm font-headline font-semibold text-on-surface mb-1">Arrastra tu archivo aquí</p>
+          <p class="text-xs text-on-surface-variant mb-4">o haz clic para examinar tus archivos</p>
+          <div class="flex items-center justify-center gap-3 text-[11px] font-label text-outline uppercase tracking-wider">
+            <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">description</span>PDF</span>
+            <span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+            <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">image</span>JPG, PNG</span>
+          </div>
+          <input type="file" id="file" style="display:none;" onchange="fileSelected(this)">
+        </div>
+        <p id="filename" class="text-xs text-primary mt-3" style="display:none;"></p>
+
+        <button class="w-full mt-6 py-3.5 rounded-xl bg-primary text-on-primary font-label font-semibold text-sm hover:bg-primary-container transition-colors">Subir documento</button>
+      </div>
+      <p class="text-center text-xs text-on-surface-variant mt-6">Sesión iniciada como Daniela González</p>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// SUPABASE — AUTENTICACIÓN REAL
+// ============================================================
+const SUPABASE_URL = 'https://khocqleetyjdjnnqyjuf.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtob2NxbGVldHlqZGpubnF5anVmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYzOTY0MjgsImV4cCI6MjEwMTk3MjQyOH0.4OoDdnZnKINx_KWG-mXFcGH-3iNgWRjXSme6fOvThiI';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let currentPersona = null;
+
+async function handleLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const errBox = document.getElementById('login-error');
+  const errText = document.getElementById('login-error-text');
+  const btn = document.getElementById('login-btn');
+  errBox.classList.add('hidden');
+
+  if (!email || !password) {
+    errText.textContent = 'Ingresa tu correo y contraseña.';
+    errBox.classList.remove('hidden');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Entrando...';
+
+  const { data: authData, error: authError } = await sb.auth.signInWithPassword({ email, password });
+
+  if (authError) {
+    errText.textContent = 'Correo o contraseña incorrectos.';
+    errBox.classList.remove('hidden');
+    btn.disabled = false; btn.textContent = 'Iniciar sesión';
+    return;
+  }
+
+  const { data: persona, error: personaError } = await sb
+    .from('personas')
+    .select('*')
+    .eq('user_id', authData.user.id)
+    .maybeSingle();
+
+  btn.disabled = false; btn.textContent = 'Iniciar sesión';
+
+  if (personaError || !persona) {
+    errText.textContent = 'Tu cuenta existe pero no está ligada a ningún perfil en la tabla personas.';
+    errBox.classList.remove('hidden');
+    await sb.auth.signOut();
+    return;
+  }
+
+  currentPersona = persona;
+  showScreen('admin');
+  aplicarPermisosSidebar();
+}
+
+async function handleLogout() {
+  await sb.auth.signOut();
+  currentPersona = null;
+  showScreen('login');
+}
+
+function aplicarPermisosSidebar() {
+  if (!currentPersona) return;
+  const esAdmin = currentPersona.rol === 'admin';
+
+  document.getElementById('side-dashboard').style.display = esAdmin ? '' : 'none';
+  document.getElementById('side-empresas').style.display = esAdmin ? '' : 'none';
+  document.getElementById('side-config').style.display = esAdmin ? '' : 'none';
+  document.getElementById('side-captura').style.display = (esAdmin || currentPersona.permiso_registrar_gastos) ? '' : 'none';
+  document.getElementById('side-checklist').style.display = (esAdmin || currentPersona.permiso_pagar_gastos) ? '' : 'none';
+  document.getElementById('side-historial').style.display = (esAdmin || currentPersona.permiso_registrar_gastos || currentPersona.permiso_pagar_gastos) ? '' : 'none';
+
+  document.getElementById('user-name').textContent = currentPersona.nombre;
+  document.getElementById('user-role').textContent = esAdmin ? 'Administrador/a' : 'Colaborador/a';
+
+  const primera = SUBVIEWS.find(k => document.getElementById('side-' + k).style.display !== 'none');
+  if (primera) showSub(primera);
+}
+
+// si ya hay una sesión activa (recargaste la página), entra directo
+sb.auth.getSession().then(async ({ data }) => {
+  if (!data.session) return;
+  const { data: persona } = await sb
+    .from('personas')
+    .select('*')
+    .eq('user_id', data.session.user.id)
+    .maybeSingle();
+  if (persona) {
+    currentPersona = persona;
+    showScreen('admin');
+    aplicarPermisosSidebar();
+  }
+});
+
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('visible'));
+  document.getElementById('screen-' + name).classList.add('visible');
+  document.querySelectorAll('[id^="nav-"]').forEach(b => { b.style.background = ''; b.style.borderColor = '#3A453E'; b.style.color = '#D6DBD3'; });
+  const active = document.getElementById('nav-' + name);
+  active.style.background = '#094cb2'; active.style.borderColor = '#094cb2'; active.style.color = '#fff';
+  if (name === 'admin' && !currentPersona) showSub('dashboard');
+}
+
+function fileSelected(input) {
+  if (input.files.length) {
+    const p = document.getElementById('filename');
+    p.textContent = 'Seleccionado: ' + input.files[0].name;
+    p.style.display = 'block';
+  }
+}
+
+const SUBVIEWS = ['dashboard','empresas','config','captura','checklist','historial'];
+
+function showSub(name) {
+  document.querySelectorAll('.sub').forEach(s => s.classList.remove('visible'));
+  document.getElementById('sub-' + name).classList.add('visible');
+  SUBVIEWS.forEach(k => {
+    const el = document.getElementById('side-' + k);
+    el.className = 'cursor-pointer flex items-center px-6 py-3.5 rounded-xl transition-all duration-300 ' +
+      (k === name ? 'bg-surface-container-highest text-primary font-semibold' : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface');
+  });
+  if (name === 'dashboard') renderDashboard();
+  if (name === 'empresas') renderGrid();
+  if (name === 'checklist') { renderGastosTabs(); }
+  if (name === 'historial') renderMesTabs();
+}
+
+// ============================================================
+// MÓDULO DOCUMENTOS
+// ============================================================
+
+function statusDot(estado) {
+  const map = { subido: ['bg-primary','text-primary','Subido'], atrasado: ['bg-error','text-error','Atrasado'], pendiente: ['bg-tertiary','text-tertiary','Pendiente'] };
+  const [dot, txt, label] = map[estado];
+  return '<span class="inline-flex items-center gap-1.5 font-label text-xs font-semibold ' + txt + '"><span class="w-1.5 h-1.5 rounded-full ' + dot + '"></span>' + label + '</span>';
+}
+
+const empresas = [
+  { id: 'A', nombre: 'Empresa A', rs: 'P', periodo: 'Agosto 2026', total: 10, completos: 7, atrasados: 1,
+    docs: [
+      { nombre: 'Pago', responsable: 'Daniela González', estado: 'subido' },
+      { nombre: 'Constancia SAT', responsable: 'Luis Ramírez', estado: 'atrasado' },
+      { nombre: 'Alta IMSS', responsable: 'Carla Núñez', estado: 'pendiente' },
+      { nombre: 'Comprobante domicilio', responsable: 'Luis Ramírez', estado: 'subido' },
+    ]},
+  { id: 'B', nombre: 'Empresa B', rs: 'P', periodo: 'Agosto 2026', total: 6, completos: 6, atrasados: 0,
+    docs: [
+      { nombre: 'Pago', responsable: 'Daniela González', estado: 'subido' },
+      { nombre: 'Póliza de seguro', responsable: 'Carla Núñez', estado: 'subido' },
+    ]},
+  { id: 'C', nombre: 'Empresa C', rs: 'H', periodo: 'Julio 2026', total: 8, completos: 5, atrasados: 2,
+    docs: [
+      { nombre: 'Factura', responsable: 'Mario Fuentes', estado: 'atrasado' },
+      { nombre: 'Constancia SAT', responsable: 'Luis Ramírez', estado: 'atrasado' },
+      { nombre: 'Contrato firmado', responsable: 'Mario Fuentes', estado: 'pendiente' },
+    ]},
+];
+let selected = 'A';
+let currentFilter = 'todas';
+
+function renderDashboard() {
+  const alDia = empresas.filter(e => e.atrasados === 0).length;
+  const pendientes = empresas.reduce((s,e) => s + (e.total - e.completos - e.atrasados), 0);
+  const atrasados = empresas.reduce((s,e) => s + e.atrasados, 0);
+  document.getElementById('kpi-al-dia').textContent = alDia + '/' + empresas.length;
+  document.getElementById('kpi-pendientes').textContent = pendientes;
+  document.getElementById('kpi-atrasados').textContent = atrasados;
+
+  const rsList = ['P','H'];
+  const box = document.getElementById('rs-breakdown');
+  box.innerHTML = rsList.map(rs => {
+    const list = empresas.filter(e => e.rs === rs);
+    const total = list.reduce((s,e)=>s+e.total,0);
+    const completos = list.reduce((s,e)=>s+e.completos,0);
+    const pct = Math.round(completos/total*100);
+    return '<div onclick="showSub(\'empresas\');filterRS(\''+rs+'\')" class="cursor-pointer bg-surface-container-lowest rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow">' +
+      '<div class="flex justify-between items-start mb-4">' +
+        '<div class="flex items-center gap-3">' +
+          '<div class="w-10 h-10 rounded-xl bg-surface-container-high flex items-center justify-center text-on-surface-variant"><span class="material-symbols-outlined text-[20px]">account_balance</span></div>' +
+          '<div><h4 class="font-headline font-semibold text-on-surface">Razón social ' + rs + '</h4><p class="text-[10px] font-label text-on-surface-variant uppercase tracking-wider">' + list.length + ' empresas</p></div>' +
+        '</div>' +
+        '<span class="text-lg font-body text-primary font-medium">' + pct + '%</span>' +
+      '</div>' +
+      '<div class="w-full h-1.5 bg-surface-container-high rounded-full overflow-hidden mb-3"><div class="h-full bg-primary rounded-full" style="width:' + pct + '%"></div></div>' +
+      '<p class="text-xs font-body text-on-surface-variant">' + completos + '/' + total + ' documentos requeridos</p>' +
+    '</div>';
+  }).join('');
+}
+
+function renderGrid() {
+  const grid = document.getElementById('grid');
+  const list = empresas.filter(e => currentFilter === 'todas' || e.rs === currentFilter);
+  grid.innerHTML = list.map(e => (
+    '<div onclick="selectEmpresa(\'' + e.id + '\')" class="cursor-pointer bg-surface-container-lowest rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow ' + (selected===e.id ? 'ring-2 ring-primary' : '') + '">' +
+      '<div class="flex justify-between items-start mb-2"><h3 class="font-headline font-semibold text-on-surface">' + e.nombre + '</h3><span class="text-[10px] font-label text-on-surface-variant">RS ' + e.rs + '</span></div>' +
+      '<p class="text-xs text-on-surface-variant mb-4">' + e.periodo + '</p>' +
+      '<div class="w-full h-1.5 bg-surface-container-high rounded-full overflow-hidden mb-2"><div class="h-full bg-primary rounded-full" style="width:' + Math.round(e.completos/e.total*100) + '%"></div></div>' +
+      '<p class="text-xs text-on-surface-variant">' + e.completos + '/' + e.total + ' completos' + (e.atrasados ? ' · <span class="text-error font-medium">' + e.atrasados + ' atrasado' + (e.atrasados>1?'s':'') + '</span>' : '') + '</p>' +
+    '</div>'
+  )).join('');
+  renderDetail();
+}
+
+function renderDetail() {
+  const e = empresas.find(x => x.id === selected);
+  document.getElementById('detail').innerHTML =
+    '<div class="grid grid-cols-[2fr_1fr_1fr_auto] gap-4 px-10 py-5 bg-surface-container-low/50 text-xs font-label uppercase tracking-widest text-on-surface-variant">' +
+      '<div>' + e.nombre + ' — ' + e.periodo + '</div><div>Responsable</div><div>Estado</div><div class="text-right">Acción</div>' +
+    '</div>' +
+    e.docs.map(d => (
+      '<div class="grid grid-cols-[2fr_1fr_1fr_auto] gap-4 px-10 py-5 items-center border-t border-outline-variant/15">' +
+        '<div class="font-headline text-base font-medium text-on-surface">' + d.nombre + '</div>' +
+        '<div class="text-sm text-on-surface-variant">' + d.responsable + '</div>' +
+        '<div>' + statusDot(d.estado) + '</div>' +
+        '<div class="text-right">' + (d.estado !== 'subido' ? '<button class="px-4 py-2 rounded-full bg-surface-container-high text-on-surface font-label text-xs hover:bg-surface-container-highest transition-colors">Recordar</button>' : '<span class="material-symbols-outlined text-on-surface-variant">download</span>') + '</div>' +
+      '</div>'
+    )).join('');
+}
+
+function selectEmpresa(id) { selected = id; renderGrid(); }
+function filterRS(rs) {
+  currentFilter = rs;
+  ['todas','P','H'].forEach(k => {
+    const b = document.getElementById('tab-' + k);
+    b.className = 'px-5 py-2.5 rounded-full font-label text-xs font-semibold transition-colors ' +
+      (k === rs ? 'bg-primary text-on-primary shadow-md shadow-primary/20' : 'bg-surface-container-high text-on-surface hover:bg-surface-container-highest');
+  });
+  renderGrid();
+}
+
+// ============================================================
+// MÓDULO GASTOS
+// ============================================================
+
+function gastosToggleRep() {
+  document.getElementById('rep-wrap').style.display = document.getElementById('f-metodo').value === 'PPD' ? 'block' : 'none';
+}
+
+function gastosValidarCaptura() {
+  const required = ['f-marca','f-rubro','f-concepto','f-monto','f-razon-social','f-metodo'];
+  let faltan = [];
+  required.forEach(id => {
+    const el = document.getElementById(id);
+    el.classList.remove('field-error');
+    if (!el.value) { el.classList.add('field-error'); faltan.push(id); }
+  });
+  if (document.getElementById('f-metodo').value === 'PPD') {
+    const rep = document.getElementById('f-rep');
+    rep.classList.remove('field-error');
+    if (!rep.value) { rep.classList.add('field-error'); faltan.push('f-rep'); }
+  }
+  const errBox = document.getElementById('form-error');
+  if (faltan.length) {
+    document.getElementById('form-error-text').textContent = 'Faltan ' + faltan.length + ' campo(s) obligatorio(s) — no se puede guardar así.';
+    errBox.classList.remove('hidden');
+  } else {
+    errBox.classList.add('hidden');
+    alert('Gasto registrado (simulado) — en la app real esto se guarda en Supabase.');
+  }
+}
+
+const gastos = [
+  { id:1, mes:'2026-08', marca:'Marca A', rubro:'Renta', concepto:'Renta de bodega', monto:8500, proveedor:'Inmobiliaria del Bajío', metodo:'PUE', rep:null, pagado:false },
+  { id:2, mes:'2026-08', marca:'Marca A', rubro:'Nóminas', concepto:'Nómina quincenal', monto:45000, proveedor:null, metodo:null, rep:null, pagado:false },
+  { id:3, mes:'2026-08', marca:'Marca A', rubro:'Gasolina', concepto:'Gasolina camionetas', monto:3200, proveedor:'Combustibles del Bajío', metodo:'PPD', rep:null, pagado:false },
+  { id:4, mes:'2026-08', marca:'Marca B', rubro:'Marketing', concepto:'Publicidad Meta Ads', monto:6000, proveedor:'Meta Platforms', metodo:'PUE', rep:null, pagado:false },
+  { id:5, mes:'2026-08', marca:'Marca B', rubro:'Insumos', concepto:'Insumos de fumigación', monto:12300, proveedor:'Química Industrial SA', metodo:'PPD', rep:'REP-00981', pagado:false },
+  { id:6, mes:'2026-08', marca:'Marca C', rubro:'Renta', concepto:'Renta de oficina', monto:9800, proveedor:'Bienes Raíces Sur', metodo:'PUE', rep:null, pagado:true },
+  { id:7, mes:'2026-07', marca:'Marca A', rubro:'Renta', concepto:'Renta de bodega', monto:8500, proveedor:'Inmobiliaria del Bajío', metodo:'PUE', rep:null, pagado:true },
+  { id:8, mes:'2026-07', marca:'Marca A', rubro:'Nóminas', concepto:'Nómina quincenal', monto:44000, proveedor:'Nómina interna', metodo:'PUE', rep:null, pagado:true },
+  { id:9, mes:'2026-07', marca:'Marca B', rubro:'Marketing', concepto:'Publicidad Google Ads', monto:5200, proveedor:'Google Ads', metodo:'PUE', rep:null, pagado:true },
+  { id:10, mes:'2026-07', marca:'Marca C', rubro:'Otro', concepto:'Mantenimiento vehículos', monto:2100, proveedor:'Taller Mecánico Reyes', metodo:'PPD', rep:'REP-00754', pagado:false },
+  { id:11, mes:'2026-06', marca:'Marca A', rubro:'Renta', concepto:'Renta de bodega', monto:8500, proveedor:'Inmobiliaria del Bajío', metodo:'PUE', rep:null, pagado:true },
+  { id:12, mes:'2026-06', marca:'Marca B', rubro:'Insumos', concepto:'Insumos de fumigación', monto:10800, proveedor:'Química Industrial SA', metodo:'PPD', rep:'REP-00612', pagado:true },
+  { id:13, mes:'2026-06', marca:'Marca C', rubro:'Renta', concepto:'Renta de oficina', monto:9800, proveedor:'Bienes Raíces Sur', metodo:'PUE', rep:null, pagado:true },
+];
+let filtroMarca = 'todas';
+let filtroMesHist = '2026-08';
+let filtroMarcaHist = 'todas';
+
+function gastoProveedor(g) {
+  return g.proveedor_nombre_comercial || g.proveedor_razon_social || null;
+}
+
+function listoParaPagar(g) {
+  if (!g.rubro || !gastoProveedor(g) || !g.metodo_pago) return false;
+  if (g.metodo_pago === 'PPD' && !g.rep) return false;
+  return true;
+}
+function faltantes(g) {
+  const f = [];
+  if (!gastoProveedor(g)) f.push('proveedor');
+  if (!g.metodo_pago) f.push('método de pago');
+  if (g.metodo_pago === 'PPD' && !g.rep) f.push('REP');
+  return f;
+}
+
+let gastosDelMesActual = [];
+
+function rangoMesActual() {
+  const hoy = new Date();
+  const inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().slice(0,10);
+  const fin = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).toISOString().slice(0,10);
+  return { inicio, fin };
+}
+
+async function fetchGastosChecklist() {
+  const { inicio, fin } = rangoMesActual();
+  const { data, error } = await sb
+    .from('gastos')
+    .select('*, marcas(nombre)')
+    .gte('fecha_registro', inicio)
+    .lte('fecha_registro', fin)
+    .order('created_at', { ascending: true });
+  if (error) { console.error(error); gastosDelMesActual = []; return; }
+  gastosDelMesActual = data || [];
+}
+
+async function renderGastosTabs() {
+  document.getElementById('lista-gastos').innerHTML = '<p class="text-sm text-on-surface-variant">Cargando...</p>';
+  await fetchGastosChecklist();
+  const marcas = ['todas', ...new Set(gastosDelMesActual.map(g => g.marcas ? g.marcas.nombre : 'Sin marca'))];
+  document.getElementById('marca-tabs').innerHTML = marcas.map(m => (
+    '<button onclick="gastosFiltrarMarca(\'' + m + '\')" id="mtab-' + m + '" class="px-4 py-2 rounded-full font-label text-xs font-semibold transition-colors">' + (m === 'todas' ? 'Todas' : m) + '</button>'
+  )).join('');
+  gastosFiltrarMarca('todas');
+}
+
+function gastosFiltrarMarca(m) {
+  filtroMarca = m;
+  document.querySelectorAll('[id^="mtab-"]').forEach(b => {
+    const active = b.id === 'mtab-' + m;
+    b.className = 'px-4 py-2 rounded-full font-label text-xs font-semibold transition-colors ' +
+      (active ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface hover:bg-surface-container-highest');
+  });
+  renderGastosLista();
+}
+
+function renderGastosLista() {
+  const list = gastosDelMesActual.filter(g => filtroMarca === 'todas' || (g.marcas && g.marcas.nombre === filtroMarca));
+  const pendientes = list.filter(g => g.estado !== 'pagado');
+  const totalPendiente = pendientes.reduce((s,g) => s + Number(g.monto), 0);
+  const listos = pendientes.filter(listoParaPagar).length;
+  document.getElementById('total-pendiente').textContent = '$' + totalPendiente.toLocaleString('es-MX');
+  document.getElementById('cuenta-listos').textContent = listos + '/' + pendientes.length;
+
+  document.getElementById('lista-gastos').innerHTML = list.map(g => {
+    const pagado = g.estado === 'pagado';
+    const listo = listoParaPagar(g);
+    const falt = faltantes(g);
+    const nombreMarca = g.marcas ? g.marcas.nombre : 'Sin marca';
+    const proveedor = gastoProveedor(g);
+    return '<div class="bg-surface-container-lowest rounded-2xl shadow-sm p-5 flex items-center justify-between ' + (pagado ? 'opacity-50' : '') + '">' +
+      '<div class="flex-1 min-w-0">' +
+        '<div class="flex items-center gap-2 mb-1">' +
+          '<p class="font-headline font-medium text-on-surface ' + (pagado ? 'line-through' : '') + '">' + g.concepto + '</p>' +
+          '<span class="text-[10px] font-label uppercase tracking-wider text-on-surface-variant bg-surface-container-high px-2 py-0.5 rounded-md">' + (g.rubro || 'Sin rubro') + '</span>' +
+        '</div>' +
+        '<p class="text-xs text-on-surface-variant">' + nombreMarca + (proveedor ? ' · ' + proveedor : '') + '</p>' +
+        (!pagado && !listo ? '<p class="text-xs text-error mt-1 flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">warning</span>Falta: ' + falt.join(', ') + '</p>' : '') +
+      '</div>' +
+      '<div class="flex items-center gap-4 pl-4">' +
+        '<p class="font-headline font-semibold text-on-surface">$' + Number(g.monto).toLocaleString('es-MX') + '</p>' +
+        (pagado
+          ? '<span class="inline-flex items-center gap-1 text-xs font-label font-semibold text-primary"><span class="material-symbols-outlined text-[16px]">check_circle</span>Pagado</span>'
+          : listo
+            ? '<button onclick="gastosMarcarPagado(\'' + g.id + '\')" class="px-4 py-2 rounded-full bg-primary text-on-primary font-label text-xs font-semibold hover:bg-primary-container transition-colors">Marcar pagado</button>'
+            : '<button disabled class="px-4 py-2 rounded-full bg-surface-container-high text-on-surface-variant font-label text-xs cursor-not-allowed">Falta info</button>'
+        ) +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+async function gastosMarcarPagado(id) {
+  const hoy = new Date().toISOString().slice(0,10);
+  const { error } = await sb.from('gastos').update({
+    estado: 'pagado',
+    pagado_por: currentPersona.id,
+    fecha_pago: hoy
+  }).eq('id', id);
+  if (error) { alert('No se pudo marcar como pagado: ' + error.message); return; }
+  await fetchGastosChecklist();
+  renderGastosLista();
+}
+
+async function gastosGenerarCorte() {
+  if (filtroMarca === 'todas') {
+    alert('Selecciona primero una marca específica para generar su corte de mes.');
+    return;
+  }
+  const ejemplo = gastosDelMesActual.find(g => g.marcas && g.marcas.nombre === filtroMarca);
+  if (!ejemplo) return;
+  const { inicio } = rangoMesActual();
+  const { data, error } = await sb.rpc('generar_corte_mes', { p_marca_id: ejemplo.marca_id, p_mes: inicio });
+  if (error) { alert('Error al generar el corte: ' + error.message); return; }
+  document.getElementById('corte-resumen').classList.remove('hidden');
+  document.getElementById('corte-resumen-body').innerHTML =
+    '<p class="mb-2"><span class="font-semibold text-on-surface">' + data.cantidad_pagados + '</span> pagados por un total de <span class="font-semibold text-on-surface">$' + Number(data.total_pagado).toLocaleString('es-MX') + '</span></p>' +
+    '<p><span class="font-semibold text-error">' + data.cantidad_pendientes + '</span> pendientes por <span class="font-semibold text-error">$' + Number(data.total_pendiente).toLocaleString('es-MX') + '</span></p>';
+}
+
+const meses = [
+  { key:'2026-08', label:'Agosto 2026' },
+  { key:'2026-07', label:'Julio 2026' },
+  { key:'2026-06', label:'Junio 2026' },
+];
+
+function renderMesTabs() {
+  document.getElementById('mes-tabs').innerHTML = meses.map(m => (
+    '<button onclick="gastosFiltrarMesHist(\'' + m.key + '\')" id="mestab-' + m.key + '" class="px-4 py-2 rounded-full font-label text-xs font-semibold transition-colors">' + m.label + '</button>'
+  )).join('');
+  gastosFiltrarMesHist(filtroMesHist);
+}
+
+function gastosFiltrarMesHist(mes) {
+  filtroMesHist = mes;
+  meses.forEach(m => {
+    const b = document.getElementById('mestab-' + m.key);
+    const active = m.key === mes;
+    b.className = 'px-4 py-2 rounded-full font-label text-xs font-semibold transition-colors ' +
+      (active ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface hover:bg-surface-container-highest');
+  });
+  const marcas = ['todas', ...new Set(gastos.filter(g => g.mes === mes).map(g => g.marca))];
+  document.getElementById('marca-tabs-hist').innerHTML = marcas.map(m => (
+    '<button onclick="gastosFiltrarMarcaHist(\'' + m + '\')" id="mhtab-' + m + '" class="px-3 py-1.5 rounded-full font-label text-[11px] font-semibold transition-colors">' + (m === 'todas' ? 'Todas las marcas' : m) + '</button>'
+  )).join('');
+  gastosFiltrarMarcaHist('todas');
+}
+
+function gastosFiltrarMarcaHist(m) {
+  filtroMarcaHist = m;
+  document.querySelectorAll('[id^="mhtab-"]').forEach(b => {
+    const active = b.id === 'mhtab-' + m;
+    b.className = 'px-3 py-1.5 rounded-full font-label text-[11px] font-semibold transition-colors ' +
+      (active ? 'bg-on-surface text-surface' : 'bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest');
+  });
+  renderHistorial();
+}
+
+function renderHistorial() {
+  const list = gastos.filter(g => g.mes === filtroMesHist && (filtroMarcaHist === 'todas' || g.marca === filtroMarcaHist));
+  const totalRegistrado = list.reduce((s,g) => s + g.monto, 0);
+  const totalPagado = list.filter(g => g.pagado).reduce((s,g) => s + g.monto, 0);
+  const totalPendiente = totalRegistrado - totalPagado;
+
+  document.getElementById('hist-total-registrado').textContent = '$' + totalRegistrado.toLocaleString('es-MX');
+  document.getElementById('hist-total-pagado').textContent = '$' + totalPagado.toLocaleString('es-MX');
+  document.getElementById('hist-total-pendiente').textContent = '$' + totalPendiente.toLocaleString('es-MX');
+
+  const porRubro = {};
+  list.forEach(g => { porRubro[g.rubro] = (porRubro[g.rubro] || 0) + g.monto; });
+  document.getElementById('hist-rubros').innerHTML = Object.entries(porRubro).map(([rubro, monto]) => (
+    '<span class="text-xs font-label bg-surface-container-high text-on-surface px-3 py-1.5 rounded-full">' + rubro + ' · $' + monto.toLocaleString('es-MX') + '</span>'
+  )).join('');
+
+  document.getElementById('hist-lista').innerHTML = list.map(g => (
+    '<div class="bg-surface-container-lowest rounded-xl shadow-sm px-5 py-3.5 flex items-center justify-between">' +
+      '<div class="flex-1 min-w-0">' +
+        '<p class="text-sm font-medium text-on-surface">' + g.concepto + '</p>' +
+        '<p class="text-xs text-on-surface-variant">' + g.marca + ' · ' + g.rubro + (g.proveedor ? ' · ' + g.proveedor : '') + '</p>' +
+      '</div>' +
+      '<div class="flex items-center gap-4">' +
+        '<p class="text-sm font-headline font-semibold text-on-surface">$' + g.monto.toLocaleString('es-MX') + '</p>' +
+        (g.pagado
+          ? '<span class="inline-flex items-center gap-1 text-xs font-label font-semibold text-primary"><span class="material-symbols-outlined text-[14px]">check_circle</span>Pagado</span>'
+          : '<span class="inline-flex items-center gap-1 text-xs font-label font-semibold text-error"><span class="material-symbols-outlined text-[14px]">schedule</span>Pendiente</span>'
+        ) +
+      '</div>' +
+    '</div>'
+  )).join('');
+}
+
+showScreen('login');
+</script>
+
+</body>
+</html>
