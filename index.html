@@ -1,0 +1,2058 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Portal de documentos y gastos — borrador v3</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script id="tailwind-config">
+tailwind.config = { theme: { extend: {
+  colors: {"on-primary":"#ffffff","error":"#ba1a1a","on-tertiary-fixed-variant":"#524600","on-secondary-container":"#606569","on-secondary-fixed-variant":"#42474b","on-tertiary":"#ffffff","tertiary-fixed":"#f9e37a","secondary-container":"#dfe3e8","background":"#faf9fa","primary-container":"#3366cc","on-background":"#1b1c1d","surface-container-high":"#e9e8e9","on-secondary":"#ffffff","secondary":"#5a5f63","surface-container-lowest":"#ffffff","tertiary-fixed-dim":"#dcc661","outline":"#737784","tertiary-container":"#bfab49","primary-fixed-dim":"#b1c5ff","surface-bright":"#faf9fa","on-primary-container":"#e7ebff","surface-container-low":"#f5f3f4","on-surface":"#1b1c1d","secondary-fixed-dim":"#c2c7cc","outline-variant":"#c3c6d5","primary-fixed":"#d9e2ff","on-tertiary-fixed":"#211b00","on-primary-fixed":"#001946","inverse-surface":"#303031","on-tertiary-container":"#4a3f00","secondary-fixed":"#dfe3e8","surface-variant":"#e3e2e3","error-container":"#ffdad6","on-surface-variant":"#434653","surface-container":"#efedee","surface-dim":"#dbdadb","surface-tint":"#2259bf","surface":"#faf9fa","surface-container-highest":"#e3e2e3","primary":"#094cb2","on-primary-fixed-variant":"#00419d","inverse-primary":"#b1c5ff","on-error":"#ffffff","tertiary":"#6d5e00","on-secondary-fixed":"#171c20","on-error-container":"#93000a","inverse-on-surface":"#f2f0f1"},
+  borderRadius: {"DEFAULT":"0.125rem","lg":"0.25rem","xl":"0.5rem","full":"0.75rem"},
+  fontFamily: {"headline":["Noto Serif"],"display":["Noto Serif"],"body":["Inter"],"label":["Public Sans"]}
+}}}
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Noto+Serif:wght@100..900&family=Public+Sans:wght@100..900&display=swap" rel="stylesheet">
+<style>
+  .material-symbols-outlined { font-family: 'Material Symbols Outlined'; font-weight: normal; font-style: normal; font-size: 20px; line-height: 1; display: inline-block; white-space: nowrap; vertical-align: middle; }
+  body { margin: 0; }
+  .screen { display: none; }
+  .screen.visible { display: block; }
+  .sub { display: none; }
+  .sub.visible { display: block; }
+  .field-error { border-color: #ba1a1a !important; background: #ffdad6 !important; }
+</style>
+</head>
+<body class="bg-background font-body text-on-surface">
+
+<!-- LOGIN -->
+<div id="screen-login" class="screen">
+  <div class="min-h-[90vh] flex items-center justify-center px-6">
+    <div class="w-full max-w-sm">
+      <div class="mb-10 text-center">
+        <h1 class="text-3xl font-headline font-bold text-primary tracking-tight">Portal de documentos</h1>
+        <p class="text-[11px] font-label uppercase tracking-widest text-tertiary mt-1">Documentos y gastos</p>
+      </div>
+      <div class="bg-surface-container-lowest rounded-3xl shadow-sm p-8 flex flex-col gap-5">
+        <div>
+          <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-semibold">Correo</label>
+          <input id="login-email" type="email" placeholder="nombre@empresa.com" class="w-full mt-2 bg-surface-container-low rounded-xl p-3.5 text-sm outline-none focus:ring-2 focus:ring-primary/40">
+        </div>
+        <div>
+          <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-semibold">Contraseña</label>
+          <input id="login-password" type="password" placeholder="••••••••" class="w-full mt-2 bg-surface-container-low rounded-xl p-3.5 text-sm outline-none focus:ring-2 focus:ring-primary/40">
+        </div>
+        <div id="login-error" class="hidden text-sm text-error bg-error-container/40 rounded-xl px-4 py-3 flex items-center gap-2">
+          <span class="material-symbols-outlined text-[18px]">error</span>
+          <span id="login-error-text"></span>
+        </div>
+        <button id="login-btn" onclick="handleLogin()" class="w-full mt-2 py-3.5 rounded-xl bg-primary text-on-primary font-label font-semibold text-sm hover:bg-primary-container transition-colors">Iniciar sesión</button>
+        <a href="#" class="text-xs text-on-surface-variant text-center hover:text-primary transition-colors">¿Olvidaste tu contraseña?</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ADMIN SHELL -->
+<div id="screen-admin" class="screen">
+  <aside class="fixed left-0 top-0 h-full w-72 bg-surface-container-low z-50 flex flex-col pt-8 pb-10 shadow-[4px_0_24px_rgba(0,0,0,0.02)] overflow-y-auto">
+    <div class="px-10 mb-8">
+      <h1 class="text-2xl font-headline font-bold text-primary tracking-tight">Portal</h1>
+      <p class="text-[10px] font-label uppercase tracking-widest text-tertiary mt-1">Documentos y gastos</p>
+    </div>
+    <nav class="flex-1 px-4 space-y-1">
+      <p class="px-6 pt-2 pb-1 text-[10px] font-label uppercase tracking-widest text-on-surface-variant/60">Documentos</p>
+      <a onclick="showSub('dashboard')" id="side-dashboard" class="cursor-pointer flex items-center px-6 py-3.5 rounded-xl transition-all duration-300"><span class="material-symbols-outlined mr-4">dashboard</span><span class="text-sm font-label">Dashboard</span></a>
+      <a onclick="showSub('empresas')" id="side-empresas" class="cursor-pointer flex items-center px-6 py-3.5 rounded-xl transition-all duration-300"><span class="material-symbols-outlined mr-4">apartment</span><span class="text-sm font-label">Empresas</span></a>
+      <a onclick="showSub('config')" id="side-config" class="cursor-pointer flex items-center px-6 py-3.5 rounded-xl transition-all duration-300"><span class="material-symbols-outlined mr-4">settings</span><span class="text-sm font-label">Configuración</span></a>
+
+      <p class="px-6 pt-5 pb-1 text-[10px] font-label uppercase tracking-widest text-on-surface-variant/60">Gastos</p>
+      <a onclick="showSub('captura')" id="side-captura" class="cursor-pointer flex items-center px-6 py-3.5 rounded-xl transition-all duration-300"><span class="material-symbols-outlined mr-4">receipt_long</span><span class="text-sm font-label">Registrar gasto</span></a>
+      <a onclick="showSub('checklist')" id="side-checklist" class="cursor-pointer flex items-center px-6 py-3.5 rounded-xl transition-all duration-300"><span class="material-symbols-outlined mr-4">checklist</span><span class="text-sm font-label">Checklist de pago</span></a>
+      <a onclick="showSub('historial')" id="side-historial" class="cursor-pointer flex items-center px-6 py-3.5 rounded-xl transition-all duration-300"><span class="material-symbols-outlined mr-4">history</span><span class="text-sm font-label">Historial</span></a>
+    </nav>
+    <div class="px-8 pt-6 border-t border-outline-variant/10">
+      <div class="flex items-center gap-3 p-3 rounded-2xl bg-surface-container-lowest shadow-sm">
+        <div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div>
+        <div class="flex-1 min-w-0">
+          <p id="user-name" class="text-xs font-bold text-on-surface truncate">—</p>
+          <p id="user-role" class="text-[10px] text-on-surface-variant truncate">—</p>
+        </div>
+        <a onclick="handleLogout()" class="cursor-pointer material-symbols-outlined text-[16px] text-on-surface-variant hover:text-primary">logout</a>
+      </div>
+    </div>
+  </aside>
+
+  <div class="pl-72">
+    <header class="fixed top-0 left-72 right-0 h-20 bg-surface/80 backdrop-blur-xl z-40 flex items-center justify-between px-12">
+      <div class="flex items-center gap-4 text-on-surface-variant">
+        <span class="material-symbols-outlined text-[20px]">search</span>
+        <input placeholder="Buscar empresa, gasto o documento..." class="bg-transparent border-none focus:ring-0 text-sm font-label w-64 placeholder:text-outline-variant">
+      </div>
+      <div class="flex items-center gap-6 relative">
+        <div class="relative">
+          <button onclick="toggleNotifBell()" class="text-on-surface-variant hover:text-primary transition-colors"><span class="material-symbols-outlined">notifications</span></button>
+          <div id="notif-dropdown" class="hidden absolute right-0 top-10 w-72 bg-surface-container-lowest rounded-2xl shadow-lg border border-outline-variant/20 p-4 z-50">
+            <p class="text-sm font-medium text-on-surface mb-1">Notificaciones</p>
+            <p class="text-xs text-on-surface-variant">Todavía no hay recordatorios automáticos configurados — eso llega cuando conectemos el script de avisos.</p>
+          </div>
+        </div>
+        <button onclick="abrirModalEmpresa()" class="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-full text-xs font-label hover:bg-primary-container transition-all duration-300 shadow-lg shadow-primary/10"><span class="material-symbols-outlined text-[18px]">add</span>Nueva empresa</button>
+      </div>
+    </header>
+
+    <div id="modal-empresa" class="hidden fixed inset-0 bg-black/40 z-[100] flex items-center justify-center px-6">
+      <div class="bg-surface-container-lowest rounded-3xl shadow-lg p-8 w-full max-w-md">
+        <h3 class="font-headline text-xl font-semibold text-on-surface mb-5">Nueva empresa</h3>
+        <div class="flex flex-col gap-4">
+          <div>
+            <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-semibold">Nombre de la empresa</label>
+            <input id="me-nombre" type="text" placeholder="Ej. Empresa Nueva SA" class="w-full mt-2 bg-surface-container-low rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40">
+          </div>
+          <div>
+            <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-semibold">Razón social</label>
+            <select id="me-razon-social" class="w-full mt-2 bg-surface-container-low rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40"></select>
+          </div>
+          <div>
+            <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-semibold">Frecuencia</label>
+            <select id="me-frecuencia" class="w-full mt-2 bg-surface-container-low rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40">
+              <option value="mensual">Mensual</option>
+              <option value="quincenal">Quincenal</option>
+              <option value="trimestral">Trimestral</option>
+              <option value="anual">Anual</option>
+            </select>
+          </div>
+          <p id="me-error" class="hidden text-sm text-error"></p>
+          <div class="flex gap-3 mt-2">
+            <button onclick="cerrarModalEmpresa()" class="flex-1 py-3 rounded-xl bg-surface-container-high text-on-surface font-label text-sm font-semibold hover:bg-surface-container-highest">Cancelar</button>
+            <button onclick="guardarNuevaEmpresa()" class="flex-1 py-3 rounded-xl bg-primary text-on-primary font-label text-sm font-semibold hover:bg-primary-container">Crear empresa</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <main class="relative pt-20 min-h-screen">
+      <div class="px-12 py-10">
+
+        <!-- SUBVIEW: DASHBOARD (documentos) -->
+        <div id="sub-dashboard" class="sub">
+          <h2 class="text-4xl font-headline font-bold text-on-surface tracking-tight mb-1">Seguimiento general</h2>
+          <p class="text-sm text-on-surface-variant mb-8">Avance de recolección documental del ciclo actual, por razón social.</p>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+            <div onclick="showSub('empresas')" class="cursor-pointer bg-surface-container-lowest rounded-3xl p-6 shadow-sm hover:shadow-md transition-shadow flex items-center justify-between">
+              <div><p class="text-xs font-label uppercase tracking-widest text-on-surface-variant mb-1">Empresas ingresadas</p><p class="text-3xl font-headline font-bold text-on-surface" id="kpi-ingresadas">—</p></div>
+              <div class="w-12 h-12 rounded-full bg-primary-container/20 flex items-center justify-center"><span class="material-symbols-outlined text-primary">domain</span></div>
+            </div>
+            <div onclick="abrirDetalleDashboard('pendientes')" class="cursor-pointer bg-surface-container-lowest rounded-3xl p-6 shadow-sm hover:shadow-md transition-shadow flex items-center justify-between">
+              <div><p class="text-xs font-label uppercase tracking-widest text-on-surface-variant mb-1">Documentos pendientes</p><p class="text-3xl font-headline font-bold text-on-surface" id="kpi-pendientes">—</p></div>
+              <div class="w-12 h-12 rounded-full bg-tertiary-container/30 flex items-center justify-center"><span class="material-symbols-outlined text-tertiary">pending_actions</span></div>
+            </div>
+            <div onclick="abrirDetalleDashboard('atrasados')" class="cursor-pointer bg-surface-container-lowest rounded-3xl p-6 shadow-sm hover:shadow-md transition-shadow flex items-center justify-between">
+              <div><p class="text-xs font-label uppercase tracking-widest text-on-surface-variant mb-1">Documentos atrasados</p><p class="text-3xl font-headline font-bold text-error" id="kpi-atrasados">—</p></div>
+              <div class="w-12 h-12 rounded-full bg-error-container flex items-center justify-center"><span class="material-symbols-outlined text-error">warning</span></div>
+            </div>
+          </div>
+
+          <h3 class="text-xl font-headline font-semibold text-on-surface mb-4">Avance por razón social</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="rs-breakdown"></div>
+        </div>
+
+        <!-- Modal: detalle de documentos pendientes/atrasados del dashboard -->
+        <div id="modal-detalle-dashboard" class="hidden fixed inset-0 bg-black/40 z-[100] flex items-center justify-center px-6 py-10">
+          <div class="bg-surface-container-lowest rounded-3xl shadow-lg w-full max-w-2xl max-h-full flex flex-col">
+            <div class="flex items-center justify-between px-8 pt-8 pb-2 shrink-0">
+              <div>
+                <h3 id="mdd-titulo" class="font-headline text-xl font-semibold text-on-surface">—</h3>
+                <p class="text-xs text-on-surface-variant mt-1">Del periodo actual de cada empresa</p>
+              </div>
+              <button onclick="cerrarModalDetalleDashboard()" class="text-on-surface-variant hover:text-primary shrink-0"><span class="material-symbols-outlined">close</span></button>
+            </div>
+            <div id="mdd-lista" class="px-8 pt-4 pb-8 overflow-y-auto"></div>
+          </div>
+        </div>
+
+        <!-- SUBVIEW: EMPRESAS (documentos) -->
+        <div id="sub-empresas" class="sub">
+          <h2 class="text-4xl font-headline font-bold text-on-surface tracking-tight mb-1">Empresas</h2>
+          <p class="text-sm text-on-surface-variant mb-6">Filtra por razón social y entra a una empresa para ver y configurar su documentación.</p>
+
+          <div class="flex gap-2 mb-6 flex-wrap" id="rs-tabs"></div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8" id="grid"></div>
+
+          <div id="detail-card" class="hidden w-full rounded-[2rem] bg-surface-container-lowest shadow-sm overflow-hidden">
+            <div class="px-10 pt-8 pb-5 flex items-start justify-between flex-wrap gap-4">
+              <div>
+                <p id="detail-rs" class="text-[10px] font-label uppercase tracking-widest text-on-surface-variant mb-1">—</p>
+                <h3 id="detail-nombre" class="font-headline text-2xl font-bold text-on-surface">—</h3>
+                <p id="detail-frecuencia" class="text-xs text-tertiary mt-1"></p>
+              </div>
+              <div class="flex gap-2">
+                <button onclick="cambiarTabDetalle('plantilla')" id="dtab-plantilla" class="px-4 py-2 rounded-full font-label text-xs font-semibold transition-colors">Documentos requeridos</button>
+                <button onclick="cambiarTabDetalle('periodo')" id="dtab-periodo" class="px-4 py-2 rounded-full font-label text-xs font-semibold transition-colors">Periodo actual</button>
+              </div>
+            </div>
+
+            <div id="tab-plantilla">
+              <div class="px-10 pb-6 flex justify-end">
+                <button onclick="abrirModalNuevoDocRequerido()" class="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-full text-xs font-label hover:bg-primary-container transition-all duration-300 shadow-lg shadow-primary/10"><span class="material-symbols-outlined text-[18px]">add</span>Añadir documento</button>
+              </div>
+              <div id="pd-lista-empresa" class="px-10 pb-10"></div>
+            </div>
+
+            <div id="tab-periodo" class="hidden">
+              <div class="px-10 pt-1 pb-5 flex items-center justify-between gap-3 flex-wrap">
+                <div class="flex items-center gap-2">
+                  <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-semibold">Periodo</label>
+                  <select id="periodo-selector" onchange="cambiarPeriodoSeleccionado()" class="bg-surface-container-low rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"></select>
+                </div>
+                <button id="btn-descargar-todo" onclick="descargarTodoPeriodo()" class="flex items-center gap-2 px-4 py-2 rounded-full bg-surface-container-high text-on-surface font-label text-xs font-semibold hover:bg-surface-container-highest transition-colors">
+                  <span class="material-symbols-outlined text-[16px]">folder_zip</span>Descargar todo
+                </button>
+              </div>
+              <div id="detail"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SUBVIEW: CONFIG -->
+        <div id="sub-config" class="sub">
+          <h2 class="text-4xl font-headline font-bold text-on-surface tracking-tight mb-1">Configuración</h2>
+          <p class="text-sm text-on-surface-variant mb-8">Administra las razones sociales de la organización.</p>
+
+          <h3 class="text-lg font-headline font-semibold text-on-surface mb-3">Razones sociales</h3>
+          <div class="bg-surface-container-lowest rounded-3xl shadow-sm p-6 mb-4 max-w-lg" id="rs-lista"></div>
+          <div class="flex gap-3 max-w-lg mb-10">
+            <input id="nueva-rs-nombre" type="text" placeholder="Nombre de la nueva razón social" class="flex-1 bg-surface-container-low rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40">
+            <button onclick="crearRazonSocial()" class="px-5 py-3 rounded-xl bg-primary text-on-primary font-label text-sm font-semibold hover:bg-primary-container">Agregar</button>
+          </div>
+        </div>
+
+        <!-- Modal: añadir documento requerido a la empresa seleccionada -->
+        <div id="modal-nuevo-doc" class="hidden fixed inset-0 bg-black/40 z-[100] flex items-center justify-center px-6">
+          <div class="bg-surface-container-lowest rounded-3xl shadow-lg p-8 w-full max-w-md">
+            <h3 class="font-headline text-xl font-semibold text-on-surface mb-1">Añadir documento</h3>
+            <p id="mnd-empresa" class="text-sm text-on-surface-variant mb-5">—</p>
+            <div class="flex flex-col gap-4">
+              <div>
+                <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-semibold">Nombre del documento</label>
+                <input id="mnd-nombre" type="text" placeholder="Ej. Comprobante de domicilio" class="w-full mt-2 bg-surface-container-low rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40">
+              </div>
+              <div>
+                <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-semibold">Quién lo entrega</label>
+                <select id="mnd-persona" class="w-full mt-2 bg-surface-container-low rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40"></select>
+              </div>
+              <div>
+                <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-semibold">Nombre del archivo al descargar (opcional)</label>
+                <input id="mnd-nombre-archivo" type="text" placeholder="Si lo dejas vacío, se usa el nombre del documento" class="w-full mt-2 bg-surface-container-low rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40">
+              </div>
+              <div class="bg-surface-container-low rounded-xl px-4 py-3 flex items-center gap-2 text-xs text-on-surface-variant">
+                <span class="material-symbols-outlined text-[16px]">info</span>
+                <span id="mnd-frecuencia-info">La frecuencia la define la empresa, no cada documento.</span>
+              </div>
+              <p id="mnd-error" class="hidden text-sm text-error"></p>
+              <div class="flex gap-3 mt-2">
+                <button onclick="cerrarModalNuevoDoc()" class="flex-1 py-3 rounded-xl bg-surface-container-high text-on-surface font-label text-sm font-semibold hover:bg-surface-container-highest">Cancelar</button>
+                <button onclick="guardarNuevoDocRequerido()" class="flex-1 py-3 rounded-xl bg-primary text-on-primary font-label text-sm font-semibold hover:bg-primary-container">Agregar documento</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal: reasignar responsable de un documento de plantilla -->
+        <div id="modal-pd-persona" class="hidden fixed inset-0 bg-black/40 z-[100] flex items-center justify-center px-6">
+          <div class="bg-surface-container-lowest rounded-3xl shadow-lg p-8 w-full max-w-md">
+            <h3 class="font-headline text-xl font-semibold text-on-surface mb-1">Responsable del documento</h3>
+            <p id="mpd-documento" class="text-sm text-on-surface-variant mb-5">—</p>
+            <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-semibold">Persona responsable</label>
+            <select id="mpd-persona" class="w-full mt-2 bg-surface-container-low rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40"></select>
+            <div class="flex gap-3 mt-6">
+              <button onclick="cerrarModalPdPersona()" class="flex-1 py-3 rounded-xl bg-surface-container-high text-on-surface font-label text-sm font-semibold hover:bg-surface-container-highest">Cancelar</button>
+              <button onclick="guardarPdPersona()" class="flex-1 py-3 rounded-xl bg-primary text-on-primary font-label text-sm font-semibold hover:bg-primary-container">Guardar</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal: nombre del archivo al descargar, por documento de plantilla -->
+        <div id="modal-pd-nombrearchivo" class="hidden fixed inset-0 bg-black/40 z-[100] flex items-center justify-center px-6">
+          <div class="bg-surface-container-lowest rounded-3xl shadow-lg p-8 w-full max-w-md">
+            <h3 class="font-headline text-xl font-semibold text-on-surface mb-1">Nombre del archivo al descargar</h3>
+            <p id="mna-documento" class="text-sm text-on-surface-variant mb-4">—</p>
+            <p class="text-xs text-on-surface-variant mb-4">Así se va a llamar el archivo cuando lo descargues, sin importar cómo lo haya nombrado quien lo subió. La empresa y el mes se agregan solos.</p>
+            <input id="mna-input" type="text" oninput="actualizarPreviewNombreArchivo()" placeholder="Si lo dejas vacío, se usa el nombre del documento" class="w-full bg-surface-container-low rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40">
+            <p id="mna-preview" class="text-xs text-on-surface-variant mt-2">—</p>
+            <div class="flex gap-3 mt-6">
+              <button onclick="cerrarModalPdNombreArchivo()" class="flex-1 py-3 rounded-xl bg-surface-container-high text-on-surface font-label text-sm font-semibold hover:bg-surface-container-highest">Cancelar</button>
+              <button onclick="guardarPdNombreArchivo()" class="flex-1 py-3 rounded-xl bg-primary text-on-primary font-label text-sm font-semibold hover:bg-primary-container">Guardar</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- SUBVIEW: CAPTURA (gastos) -->
+        <div id="sub-captura" class="sub">
+          <div class="max-w-2xl">
+            <p class="text-xs font-label uppercase tracking-widest text-tertiary mb-1">Registrar gasto</p>
+            <h2 class="text-4xl font-headline font-bold text-on-surface tracking-tight mb-1">Nuevo gasto</h2>
+            <p class="text-sm text-on-surface-variant mb-8">Los campos marcados con * son obligatorios para poder pagar este gasto después.</p>
+
+            <div class="bg-surface-container-lowest rounded-3xl shadow-sm p-8 flex flex-col gap-5">
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-semibold">Marca *</label>
+                  <select id="f-marca" class="w-full mt-2 bg-surface-container-low rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40"></select>
+                </div>
+                <div>
+                  <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-semibold">Rubro *</label>
+                  <select id="f-rubro" class="w-full mt-2 bg-surface-container-low rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40">
+                    <option value="">Selecciona...</option>
+                    <option>Nóminas</option><option>Gasolina</option><option>Renta</option><option>Marketing</option><option>Insumos</option><option>Otro</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-semibold">Concepto *</label>
+                <input id="f-concepto" type="text" placeholder="Ej. Renta de bodega agosto" class="w-full mt-2 bg-surface-container-low rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40">
+              </div>
+
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-semibold">Monto *</label>
+                  <input id="f-monto" type="number" placeholder="0.00" class="w-full mt-2 bg-surface-container-low rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40">
+                </div>
+                <div>
+                  <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-semibold">Fecha límite de pago</label>
+                  <input type="date" class="w-full mt-2 bg-surface-container-low rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40">
+                </div>
+              </div>
+
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-semibold">Proveedor · nombre comercial</label>
+                  <input id="f-nombre-comercial" type="text" placeholder="Ej. Gasolinera del Centro" class="w-full mt-2 bg-surface-container-low rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40">
+                </div>
+                <div>
+                  <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-semibold">Proveedor · razón social *</label>
+                  <input id="f-razon-social" type="text" placeholder="Ej. Combustibles del Bajío SA de CV" class="w-full mt-2 bg-surface-container-low rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40">
+                </div>
+              </div>
+
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-semibold">Método de pago (SAT) *</label>
+                  <select id="f-metodo" onchange="gastosToggleRep()" class="w-full mt-2 bg-surface-container-low rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40">
+                    <option value="">Selecciona...</option>
+                    <option value="PUE">PUE — pago en una sola exhibición</option>
+                    <option value="PPD">PPD — pago en parcialidades o diferido</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-semibold">Factura (folio)</label>
+                  <input id="f-factura" type="text" placeholder="Opcional" class="w-full mt-2 bg-surface-container-low rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40">
+                </div>
+              </div>
+
+              <div id="rep-wrap" style="display:none;">
+                <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-semibold">REP · Recibo Electrónico de Pago *</label>
+                <input id="f-rep" type="text" placeholder="Obligatorio en PPD" class="w-full mt-2 bg-surface-container-low rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40">
+                <p class="text-xs text-tertiary mt-1.5 flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">info</span>Obligatorio porque el pago es PPD.</p>
+              </div>
+
+              <div>
+                <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-semibold">Notas</label>
+                <textarea rows="2" placeholder="Opcional" class="w-full mt-2 bg-surface-container-low rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40"></textarea>
+              </div>
+
+              <div id="form-error" class="hidden text-sm text-error bg-error-container/40 rounded-xl px-4 py-3 flex items-center gap-2">
+                <span class="material-symbols-outlined text-[18px]">error</span>
+                <span id="form-error-text"></span>
+              </div>
+
+              <button onclick="gastosValidarCaptura()" class="w-full py-3.5 rounded-xl bg-primary text-on-primary font-label font-semibold text-sm hover:bg-primary-container transition-colors">Registrar gasto</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- SUBVIEW: CHECKLIST (gastos) -->
+        <div id="sub-checklist" class="sub">
+          <p class="text-xs font-label uppercase tracking-widest text-tertiary mb-1">Gastos por pagar · mes actual</p>
+          <h2 class="text-4xl font-headline font-bold text-on-surface tracking-tight mb-1">Checklist de pago</h2>
+          <p class="text-sm text-on-surface-variant mb-6">Marca cada gasto como pagado conforme lo vayas procesando.</p>
+
+          <div class="flex items-center justify-between mb-6">
+            <div class="flex gap-2" id="marca-tabs"></div>
+            <button onclick="gastosGenerarCorte()" class="flex items-center gap-2 px-4 py-2 rounded-full bg-surface-container-high text-on-surface font-label text-xs hover:bg-surface-container-highest transition-colors"><span class="material-symbols-outlined text-[16px]">summarize</span>Generar corte de mes</button>
+          </div>
+
+          <div class="bg-surface-container-lowest rounded-2xl shadow-sm p-5 flex items-center justify-between mb-6 max-w-lg">
+            <div>
+              <p class="text-xs font-label uppercase tracking-widest text-on-surface-variant">Pendiente de pagar</p>
+              <p class="text-2xl font-headline font-bold text-on-surface" id="total-pendiente">—</p>
+            </div>
+            <div class="text-right">
+              <p class="text-xs font-label uppercase tracking-widest text-on-surface-variant">Listos para pagar</p>
+              <p class="text-2xl font-headline font-bold text-primary" id="cuenta-listos">—</p>
+            </div>
+          </div>
+
+          <div id="lista-gastos" class="flex flex-col gap-3 max-w-3xl"></div>
+
+          <div id="corte-resumen" class="hidden mt-8 bg-surface-container-lowest rounded-2xl shadow-sm p-6 max-w-3xl">
+            <h3 class="font-headline font-semibold text-lg mb-3">Resumen del corte</h3>
+            <div id="corte-resumen-body" class="text-sm text-on-surface-variant"></div>
+          </div>
+        </div>
+
+        <!-- SUBVIEW: HISTORIAL (gastos) -->
+        <div id="sub-historial" class="sub">
+          <p class="text-xs font-label uppercase tracking-widest text-tertiary mb-1">Historial mensual</p>
+          <h2 class="text-4xl font-headline font-bold text-on-surface tracking-tight mb-1">Historial de gastos</h2>
+          <p class="text-sm text-on-surface-variant mb-6">Lo mismo que ver una pestaña de mes distinta en el Excel — todo lo registrado y pagado, mes por mes.</p>
+
+          <div class="flex gap-2 mb-4" id="mes-tabs"></div>
+          <div class="flex gap-2 mb-6" id="marca-tabs-hist"></div>
+
+          <div class="grid grid-cols-3 gap-4 mb-6 max-w-2xl">
+            <div class="bg-surface-container-lowest rounded-2xl p-5 shadow-sm">
+              <p class="text-xs font-label uppercase tracking-widest text-on-surface-variant mb-1">Registrado</p>
+              <p class="text-xl font-headline font-bold text-on-surface" id="hist-total-registrado">—</p>
+            </div>
+            <div class="bg-surface-container-lowest rounded-2xl p-5 shadow-sm">
+              <p class="text-xs font-label uppercase tracking-widest text-on-surface-variant mb-1">Pagado</p>
+              <p class="text-xl font-headline font-bold text-primary" id="hist-total-pagado">—</p>
+            </div>
+            <div class="bg-surface-container-lowest rounded-2xl p-5 shadow-sm">
+              <p class="text-xs font-label uppercase tracking-widest text-on-surface-variant mb-1">Pendiente</p>
+              <p class="text-xl font-headline font-bold text-error" id="hist-total-pendiente">—</p>
+            </div>
+          </div>
+
+          <h3 class="font-headline font-semibold text-sm text-on-surface-variant uppercase tracking-widest mb-3">Desglose por rubro</h3>
+          <div id="hist-rubros" class="flex flex-wrap gap-2 mb-8"></div>
+
+          <h3 class="font-headline font-semibold text-sm text-on-surface-variant uppercase tracking-widest mb-3">Detalle</h3>
+          <div id="hist-lista" class="flex flex-col gap-2 max-w-3xl"></div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- UPLOAD (documentos, responsable externo) -->
+<div id="screen-upload" class="screen">
+  <div class="min-h-[90vh] flex flex-col items-center px-6 py-14">
+    <div class="w-full max-w-4xl">
+      <div class="mb-6 text-center">
+        <h1 class="text-2xl font-headline font-bold text-primary tracking-tight">Tus documentos</h1>
+        <p class="text-[11px] font-label uppercase tracking-widest text-tertiary mt-1">Portal de documentos</p>
+      </div>
+
+      <div class="flex gap-2 justify-center mb-6 flex-wrap" id="upload-tabs"></div>
+
+      <div id="upload-lista" class="flex flex-col gap-3"></div>
+
+      <p class="text-center text-xs text-on-surface-variant mt-8">
+        Sesión iniciada como <span id="upload-user-name">—</span>
+        · <a onclick="handleLogout()" class="cursor-pointer text-primary hover:underline">cerrar sesión</a>
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- Modal de subida — se abre por cada documento pendiente -->
+<div id="modal-upload" class="hidden fixed inset-0 bg-black/40 z-[100] flex items-center justify-center px-6">
+  <div class="bg-surface-container-lowest rounded-3xl shadow-lg p-8 w-full max-w-md">
+    <p id="mu-empresa" class="text-xs font-label uppercase tracking-widest text-on-surface-variant mb-1">—</p>
+    <h2 id="mu-documento" class="text-2xl font-headline font-bold text-on-surface mb-2">—</h2>
+    <p id="mu-vencimiento" class="text-sm font-medium text-tertiary mb-6 flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">schedule</span><span></span></p>
+
+    <div id="dropzone" onclick="document.getElementById('file').click()" class="relative group/drop cursor-pointer rounded-2xl border-2 border-dashed border-outline-variant/40 hover:border-primary/50 transition-colors py-14 px-6 text-center">
+      <div class="w-16 h-16 rounded-full bg-surface-container-low flex items-center justify-center mx-auto mb-4">
+        <span class="material-symbols-outlined text-3xl text-primary">cloud_upload</span>
+      </div>
+      <p class="text-sm font-headline font-semibold text-on-surface mb-1">Arrastra tu archivo aquí</p>
+      <p class="text-xs text-on-surface-variant mb-4">o haz clic para examinar tus archivos</p>
+      <div class="flex items-center justify-center gap-3 text-[11px] font-label text-outline uppercase tracking-wider">
+        <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">description</span>PDF</span>
+        <span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+        <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">image</span>JPG, PNG</span>
+      </div>
+      <input type="file" id="file" style="display:none;" onchange="fileSelected(this)">
+    </div>
+    <p id="filename" class="text-xs text-primary mt-3" style="display:none;"></p>
+
+    <div class="mt-4">
+      <button type="button" onclick="toggleComentarioUpload()" class="w-full flex items-center gap-3 text-left py-1">
+        <span id="mu-comentario-check" class="w-5 h-5 rounded-md border-2 border-outline-variant flex items-center justify-center shrink-0 transition-colors">
+          <span id="mu-comentario-check-icon" class="material-symbols-outlined text-[14px] text-on-primary hidden">check</span>
+        </span>
+        <span class="text-sm text-on-surface-variant">Añadir un comentario</span>
+      </button>
+      <div id="mu-comentario-slot" class="hidden mt-2">
+        <textarea id="mu-comentario-texto" rows="3" placeholder="Escribe aquí tu comentario para quien revisa este documento..." class="w-full bg-surface-container-low rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-primary/40 resize-none"></textarea>
+      </div>
+    </div>
+
+    <p id="mu-error" class="hidden text-sm text-error bg-error-container/40 rounded-xl px-4 py-3 flex items-center gap-2 mt-4">
+      <span class="material-symbols-outlined text-[18px]">error</span>
+      <span id="mu-error-text"></span>
+    </p>
+
+    <div class="flex gap-3 mt-6">
+      <button onclick="cerrarModalUpload()" class="flex-1 py-3 rounded-xl bg-surface-container-high text-on-surface font-label text-sm font-semibold hover:bg-surface-container-highest">Cancelar</button>
+      <button id="mu-submit" onclick="confirmarSubida()" class="flex-1 py-3 rounded-xl bg-primary text-on-primary font-label text-sm font-semibold hover:bg-primary-container">Subir documento</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: ver comentario dejado por el responsable (panel admin) -->
+<div id="modal-ver-comentario" class="hidden fixed inset-0 bg-black/40 z-[100] flex items-center justify-center px-6">
+  <div class="bg-surface-container-lowest rounded-3xl shadow-lg p-8 w-full max-w-md">
+    <p id="mvc-meta" class="text-xs font-label uppercase tracking-widest text-on-surface-variant mb-1">—</p>
+    <h3 id="mvc-documento" class="font-headline text-xl font-semibold text-on-surface mb-4">—</h3>
+    <p id="mvc-comentario" class="text-sm text-on-surface bg-surface-container-low rounded-2xl p-4 whitespace-pre-wrap">—</p>
+    <button onclick="cerrarModalVerComentario()" class="w-full mt-6 py-3 rounded-xl bg-surface-container-high text-on-surface font-label text-sm font-semibold hover:bg-surface-container-highest">Cerrar</button>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// SUPABASE — AUTENTICACIÓN REAL
+// ============================================================
+const SUPABASE_URL = 'https://khocqleetyjdjnnqyjuf.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtob2NxbGVldHlqZGpubnF5anVmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYzOTY0MjgsImV4cCI6MjEwMTk3MjQyOH0.4OoDdnZnKINx_KWG-mXFcGH-3iNgWRjXSme6fOvThiI';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let currentPersona = null;
+
+async function handleLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const errBox = document.getElementById('login-error');
+  const errText = document.getElementById('login-error-text');
+  const btn = document.getElementById('login-btn');
+  errBox.classList.add('hidden');
+
+  if (!email || !password) {
+    errText.textContent = 'Ingresa tu correo y contraseña.';
+    errBox.classList.remove('hidden');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Entrando...';
+
+  const { data: authData, error: authError } = await sb.auth.signInWithPassword({ email, password });
+
+  if (authError) {
+    errText.textContent = 'Correo o contraseña incorrectos.';
+    errBox.classList.remove('hidden');
+    btn.disabled = false; btn.textContent = 'Iniciar sesión';
+    return;
+  }
+
+  const { data: persona, error: personaError } = await sb
+    .from('personas')
+    .select('*')
+    .eq('user_id', authData.user.id)
+    .maybeSingle();
+
+  btn.disabled = false; btn.textContent = 'Iniciar sesión';
+
+  if (personaError || !persona) {
+    errText.textContent = 'Tu cuenta existe pero no está ligada a ningún perfil en la tabla personas.';
+    errBox.classList.remove('hidden');
+    await sb.auth.signOut();
+    return;
+  }
+
+  currentPersona = persona;
+  await enrutarPersona();
+}
+
+async function handleLogout() {
+  await sb.auth.signOut();
+  currentPersona = null;
+  showScreen('login');
+}
+
+function tienePermisoGastos(p) {
+  return !!(p.permiso_registrar_gastos || p.permiso_pagar_gastos);
+}
+
+// Admins y cualquiera con permisos de gastos entra al panel de siempre.
+// Un responsable "puro" (sin esos permisos) va directo a su lista de documentos.
+async function enrutarPersona() {
+  if (currentPersona.rol === 'admin' || tienePermisoGastos(currentPersona)) {
+    showScreen('admin');
+    await aplicarPermisosSidebar();
+  } else {
+    showScreen('upload');
+    document.getElementById('upload-user-name').textContent = currentPersona.nombre;
+    await cargarMisDocumentos();
+  }
+}
+
+async function aplicarPermisosSidebar() {
+  if (!currentPersona) return;
+  const esAdmin = currentPersona.rol === 'admin';
+
+  document.getElementById('side-dashboard').style.display = esAdmin ? '' : 'none';
+  document.getElementById('side-empresas').style.display = esAdmin ? '' : 'none';
+  document.getElementById('side-config').style.display = esAdmin ? '' : 'none';
+  document.getElementById('side-captura').style.display = (esAdmin || currentPersona.permiso_registrar_gastos) ? '' : 'none';
+  document.getElementById('side-checklist').style.display = (esAdmin || currentPersona.permiso_pagar_gastos) ? '' : 'none';
+  document.getElementById('side-historial').style.display = (esAdmin || currentPersona.permiso_registrar_gastos || currentPersona.permiso_pagar_gastos) ? '' : 'none';
+
+  document.getElementById('user-name').textContent = currentPersona.nombre;
+  document.getElementById('user-role').textContent = esAdmin ? 'Administrador/a' : 'Colaborador/a';
+
+  await cargarCatalogos();
+
+  const primera = SUBVIEWS.find(k => document.getElementById('side-' + k).style.display !== 'none');
+  if (primera) showSub(primera);
+}
+
+function toggleNotifBell() {
+  document.getElementById('notif-dropdown').classList.toggle('hidden');
+}
+
+// si ya hay una sesión activa (recargaste la página), entra directo
+sb.auth.getSession().then(async ({ data }) => {
+  if (!data.session) return;
+  const { data: persona } = await sb
+    .from('personas')
+    .select('*')
+    .eq('user_id', data.session.user.id)
+    .maybeSingle();
+  if (persona) {
+    currentPersona = persona;
+    await enrutarPersona();
+  }
+});
+
+function showScreen(name) {
+  if ((name === 'admin' || name === 'upload') && !currentPersona) {
+    name = 'login';
+  }
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('visible'));
+  document.getElementById('screen-' + name).classList.add('visible');
+}
+
+function fileSelected(input) {
+  if (input.files.length) {
+    const p = document.getElementById('filename');
+    p.textContent = 'Seleccionado: ' + input.files[0].name;
+    p.style.display = 'block';
+  }
+}
+
+const SUBVIEWS = ['dashboard','empresas','config','captura','checklist','historial'];
+
+function showSub(name) {
+  document.querySelectorAll('.sub').forEach(s => s.classList.remove('visible'));
+  document.getElementById('sub-' + name).classList.add('visible');
+  SUBVIEWS.forEach(k => {
+    const el = document.getElementById('side-' + k);
+    el.className = 'cursor-pointer flex items-center px-6 py-3.5 rounded-xl transition-all duration-300 ' +
+      (k === name ? 'bg-surface-container-highest text-primary font-semibold' : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface');
+  });
+  if (name === 'dashboard') abrirDashboard();
+  if (name === 'empresas') abrirEmpresas();
+  if (name === 'config') abrirConfig();
+  if (name === 'checklist') { renderGastosTabs(); }
+  if (name === 'historial') renderMesTabs();
+}
+
+// ============================================================
+// MÓDULO DOCUMENTOS
+// ============================================================
+
+function statusDot(estado) {
+  const map = { subido: ['bg-green-600','text-green-700','Subido'], atrasado: ['bg-error','text-error','Atrasado'], pendiente: ['bg-tertiary','text-tertiary','Pendiente'] };
+  const [dot, txt, label] = map[estado];
+  return '<span class="inline-flex items-center gap-1.5 font-label text-xs font-semibold ' + txt + '"><span class="w-1.5 h-1.5 rounded-full ' + dot + '"></span>' + label + '</span>';
+}
+
+let marcasCache = [];
+let razonesSocialesCache = [];
+let empresasCache = [];
+let personasCache = [];
+let selected = null;
+let currentFilter = 'todas';
+
+async function cargarCatalogos() {
+  const [{ data: rs, error: rsErr }, { data: mk, error: mkErr }, { data: ps, error: psErr }] = await Promise.all([
+    sb.from('razones_sociales').select('*').order('nombre'),
+    sb.from('marcas').select('*').order('nombre'),
+    sb.from('personas').select('*').eq('activo', true).order('nombre'),
+  ]);
+  if (rsErr) console.error(rsErr);
+  if (mkErr) console.error(mkErr);
+  if (psErr) console.error(psErr);
+  personasCache = ps || [];
+  razonesSocialesCache = rs || [];
+  marcasCache = mk || [];
+  poblarSelectMarcas();
+}
+
+function poblarSelectMarcas() {
+  const sel = document.getElementById('f-marca');
+  if (!sel) return;
+  sel.innerHTML = marcasCache.length
+    ? marcasCache.map(m => '<option value="' + m.id + '">' + m.nombre + '</option>').join('')
+    : '<option value="">No hay marcas creadas todavía</option>';
+}
+
+// ---------- Dashboard ----------
+
+async function abrirDashboard() {
+  await fetchEmpresas();
+  const total = empresasCache.length;
+  const pendientes = empresasCache.reduce((s,e) => s + ((e.total_documentos||0) - (e.completos||0) - (e.atrasados||0)), 0);
+  const atrasados = empresasCache.reduce((s,e) => s + (e.atrasados||0), 0);
+  document.getElementById('kpi-ingresadas').textContent = total;
+  document.getElementById('kpi-pendientes').textContent = total ? pendientes : '—';
+  document.getElementById('kpi-atrasados').textContent = total ? atrasados : '—';
+
+  const box = document.getElementById('rs-breakdown');
+  if (!razonesSocialesCache.length) {
+    box.innerHTML = '<p class="text-sm text-on-surface-variant">Todavía no hay razones sociales creadas. Ve a Configuración para agregar la primera.</p>';
+    return;
+  }
+  box.innerHTML = razonesSocialesCache.map(rs => {
+    const list = empresasCache.filter(e => e.razon_social_id === rs.id);
+    const total = list.reduce((s,e)=>s+(e.total_documentos||0),0);
+    const completos = list.reduce((s,e)=>s+(e.completos||0),0);
+    const pct = total ? Math.round(completos/total*100) : 0;
+    return '<div onclick="showSub(\'empresas\')" class="cursor-pointer bg-surface-container-lowest rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow">' +
+      '<div class="flex justify-between items-start mb-4">' +
+        '<div class="flex items-center gap-3">' +
+          '<div class="w-10 h-10 rounded-xl bg-surface-container-high flex items-center justify-center text-on-surface-variant"><span class="material-symbols-outlined text-[20px]">account_balance</span></div>' +
+          '<div><h4 class="font-headline font-semibold text-on-surface">' + rs.nombre + '</h4><p class="text-[10px] font-label text-on-surface-variant uppercase tracking-wider">' + list.length + ' empresas</p></div>' +
+        '</div>' +
+        '<span class="text-lg font-body text-primary font-medium">' + pct + '%</span>' +
+      '</div>' +
+      '<div class="w-full h-1.5 bg-surface-container-high rounded-full overflow-hidden mb-3"><div class="h-full bg-primary rounded-full" style="width:' + pct + '%"></div></div>' +
+      '<p class="text-xs font-body text-on-surface-variant">' + completos + '/' + total + ' documentos requeridos</p>' +
+    '</div>';
+  }).join('');
+}
+
+async function abrirDetalleDashboard(filtro) {
+  const modal = document.getElementById('modal-detalle-dashboard');
+  const titulo = filtro === 'atrasados' ? 'Documentos atrasados' : 'Documentos pendientes';
+  document.getElementById('mdd-titulo').textContent = titulo;
+  const cont = document.getElementById('mdd-lista');
+  cont.innerHTML = '<p class="text-sm text-on-surface-variant py-6 text-center">Cargando...</p>';
+  modal.classList.remove('hidden');
+
+  const periodoIds = empresasCache.map(e => e.periodo_id).filter(Boolean);
+  if (!periodoIds.length) {
+    cont.innerHTML = '<p class="text-sm text-on-surface-variant py-6 text-center">Todavía no hay periodos generados en ninguna empresa.</p>';
+    return;
+  }
+
+  const { data, error } = await sb
+    .from('entregas')
+    .select('*, plantilla_documentos(nombre_documento, personas(nombre)), periodos(fecha_limite, empresa_id, empresas(nombre))')
+    .in('periodo_id', periodoIds);
+
+  if (error) { cont.innerHTML = '<p class="text-sm text-error py-6 text-center">Error al cargar: ' + error.message + '</p>'; return; }
+
+  const hoy = new Date().toISOString().slice(0, 10);
+  let lista = (data || []).map(d => {
+    const fechaLimite = d.periodos ? d.periodos.fecha_limite : null;
+    const atrasado = d.estado === 'pendiente' && fechaLimite && fechaLimite < hoy;
+    const estadoReal = d.estado === 'subido' ? 'subido' : (atrasado ? 'atrasado' : 'pendiente');
+    return { d: d, estadoReal: estadoReal, fechaLimite: fechaLimite };
+  });
+
+  lista = lista.filter(x => x.estadoReal === (filtro === 'atrasados' ? 'atrasado' : 'pendiente'));
+
+  if (!lista.length) {
+    cont.innerHTML = '<p class="text-sm text-on-surface-variant py-8 text-center">No hay documentos en esta categoría por el momento. 🎉</p>';
+    return;
+  }
+
+  const grupos = {};
+  const orden = [];
+  lista.forEach(x => {
+    const empresaId = x.d.periodos ? x.d.periodos.empresa_id : 'sin-empresa';
+    const empresaNombre = x.d.periodos && x.d.periodos.empresas ? x.d.periodos.empresas.nombre : 'Sin empresa';
+    if (!grupos[empresaId]) { grupos[empresaId] = { nombre: empresaNombre, items: [] }; orden.push(empresaId); }
+    grupos[empresaId].items.push(x);
+  });
+
+  cont.innerHTML = orden.map(id => {
+    const g = grupos[id];
+    return '<div class="mb-5 last:mb-0">' +
+      '<p class="text-xs font-label uppercase tracking-widest text-on-surface-variant mb-2 px-1">' + g.nombre + ' (' + g.items.length + ')</p>' +
+      '<div class="bg-surface-container-low rounded-2xl divide-y divide-outline-variant/10">' +
+      g.items.map(x => {
+        const nombreDoc = x.d.plantilla_documentos ? x.d.plantilla_documentos.nombre_documento : 'Documento';
+        const responsable = x.d.plantilla_documentos && x.d.plantilla_documentos.personas ? x.d.plantilla_documentos.personas.nombre : 'Sin asignar';
+        return '<div class="flex items-center justify-between gap-4 px-5 py-3">' +
+          '<div class="min-w-0">' +
+            '<p class="text-sm font-medium text-on-surface truncate">' + nombreDoc + '</p>' +
+            '<p class="text-xs text-on-surface-variant truncate">' + responsable + (x.fechaLimite ? ' · vence ' + x.fechaLimite : '') + '</p>' +
+          '</div>' +
+          statusDot(x.estadoReal) +
+        '</div>';
+      }).join('') +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function cerrarModalDetalleDashboard() {
+  document.getElementById('modal-detalle-dashboard').classList.add('hidden');
+}
+
+// ---------- Empresas ----------
+
+function statusDot(estado) {
+  const map = { subido: ['bg-green-600','text-green-700','Subido'], atrasado: ['bg-error','text-error','Atrasado'], pendiente: ['bg-tertiary','text-tertiary','Pendiente'] };
+  const [dot, txt, label] = map[estado];
+  return '<span class="inline-flex items-center gap-1.5 font-label text-xs font-semibold ' + txt + '"><span class="w-1.5 h-1.5 rounded-full ' + dot + '"></span>' + label + '</span>';
+}
+
+async function fetchEmpresas() {
+  const { data, error } = await sb.from('v_empresas_resumen').select('*').order('empresa_nombre');
+  if (error) { console.error(error); empresasCache = []; return; }
+  empresasCache = data || [];
+}
+
+async function abrirEmpresas() {
+  document.getElementById('grid').innerHTML = '<p class="text-sm text-on-surface-variant">Cargando...</p>';
+  await fetchEmpresas();
+  renderRsTabs();
+}
+
+function renderRsTabs() {
+  const cont = document.getElementById('rs-tabs');
+  const opciones = [{ id: 'todas', nombre: 'Todas' }, ...razonesSocialesCache];
+  cont.innerHTML = opciones.map(o => (
+    '<button onclick="filterRS(\'' + o.id + '\')" id="tab-' + o.id + '" class="px-5 py-2.5 rounded-full font-label text-xs font-semibold transition-colors">' + o.nombre + '</button>'
+  )).join('');
+  filterRS(opciones.find(o => o.id === currentFilter) ? currentFilter : 'todas');
+}
+
+function renderGrid() {
+  const grid = document.getElementById('grid');
+  const list = empresasCache.filter(e => currentFilter === 'todas' || e.razon_social_id === currentFilter);
+  if (!list.length) {
+    grid.innerHTML = '<p class="text-sm text-on-surface-variant col-span-3">No hay empresas todavía. Usa "+ Nueva empresa" para crear la primera.</p>';
+    selected = null;
+    mostrarDetalleEmpresa();
+    return;
+  }
+  if (!list.find(e => e.empresa_id === selected)) selected = list[0].empresa_id;
+  grid.innerHTML = list.map(e => {
+    const total = e.total_documentos || 0;
+    const completos = e.completos || 0;
+    const atrasados = e.atrasados || 0;
+    const pct = total ? Math.round(completos / total * 100) : 0;
+    return '<div class="bg-surface-container-lowest rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow ' + (selected === e.empresa_id ? 'ring-2 ring-primary' : '') + '">' +
+      '<div class="flex justify-between items-start mb-2">' +
+        '<h3 onclick="selectEmpresa(\'' + e.empresa_id + '\')" class="cursor-pointer font-headline font-semibold text-on-surface hover:text-primary flex items-center gap-2"><span class="material-symbols-outlined text-[18px] text-on-surface-variant">folder</span>' + e.empresa_nombre + '</h3>' +
+        '<button onclick="renombrarEmpresa(\'' + e.empresa_id + '\', \'' + e.empresa_nombre.replace(/'/g, "\\'") + '\')" class="text-on-surface-variant hover:text-primary shrink-0"><span class="material-symbols-outlined text-[16px]">edit</span></button>' +
+      '</div>' +
+      '<p onclick="selectEmpresa(\'' + e.empresa_id + '\')" class="cursor-pointer text-xs text-on-surface-variant mb-4">' + (e.razon_social_nombre || 'Sin razón social') + (e.fecha_limite ? ' · vence ' + e.fecha_limite : '') + '</p>' +
+      '<div onclick="selectEmpresa(\'' + e.empresa_id + '\')" class="cursor-pointer">' +
+        '<div class="w-full h-1.5 bg-surface-container-high rounded-full overflow-hidden mb-2"><div class="h-full bg-primary rounded-full" style="width:' + pct + '%"></div></div>' +
+        '<p class="text-xs text-on-surface-variant">' + completos + '/' + total + ' completos' + (atrasados ? ' · <span class="text-error font-medium">' + atrasados + ' atrasado' + (atrasados > 1 ? 's' : '') + '</span>' : '') + '</p>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+  mostrarDetalleEmpresa();
+}
+
+let tabDetalle = 'plantilla';
+let periodoSeleccionado = null;
+let docsPeriodoActualCache = [];
+
+function mostrarDetalleEmpresa() {
+  const card = document.getElementById('detail-card');
+  if (!selected) { card.classList.add('hidden'); return; }
+  const e = empresasCache.find(x => x.empresa_id === selected);
+  if (!e) { card.classList.add('hidden'); return; }
+  card.classList.remove('hidden');
+  document.getElementById('detail-rs').textContent = e.razon_social_nombre || 'Sin razón social';
+  document.getElementById('detail-nombre').textContent = e.empresa_nombre;
+  cambiarTabDetalle(tabDetalle || 'plantilla');
+}
+
+function cambiarTabDetalle(tab) {
+  tabDetalle = tab;
+  document.getElementById('tab-plantilla').classList.toggle('hidden', tab !== 'plantilla');
+  document.getElementById('tab-periodo').classList.toggle('hidden', tab !== 'periodo');
+  document.getElementById('dtab-plantilla').className = 'px-4 py-2 rounded-full font-label text-xs font-semibold transition-colors ' +
+    (tab === 'plantilla' ? 'bg-primary text-on-primary shadow-md shadow-primary/20' : 'bg-surface-container-high text-on-surface hover:bg-surface-container-highest');
+  document.getElementById('dtab-periodo').className = 'px-4 py-2 rounded-full font-label text-xs font-semibold transition-colors ' +
+    (tab === 'periodo' ? 'bg-primary text-on-primary shadow-md shadow-primary/20' : 'bg-surface-container-high text-on-surface hover:bg-surface-container-highest');
+  if (tab === 'periodo') abrirTabPeriodo();
+  if (tab === 'plantilla') cargarPlantillaEmpresaSeleccionada();
+}
+
+async function abrirTabPeriodo() {
+  await cargarSelectorPeriodos();
+  await renderDetail();
+}
+
+async function cargarSelectorPeriodos() {
+  const sel = document.getElementById('periodo-selector');
+  if (!selected) { sel.innerHTML = ''; periodoSeleccionado = null; return; }
+  const { data, error } = await sb
+    .from('periodos')
+    .select('id, fecha_inicio, fecha_limite, estado')
+    .eq('empresa_id', selected)
+    .order('fecha_inicio', { ascending: false });
+  if (error || !data || !data.length) {
+    sel.innerHTML = '';
+    periodoSeleccionado = null;
+    return;
+  }
+  sel.innerHTML = data.map(p => '<option value="' + p.id + '">' + formatearPeriodoLabel(p) + '</option>').join('');
+  if (!periodoSeleccionado || !data.find(p => p.id === periodoSeleccionado)) {
+    periodoSeleccionado = data[0].id;
+  }
+  sel.value = periodoSeleccionado;
+}
+
+function formatearPeriodoLabel(p) {
+  const d = p.fecha_inicio ? new Date(p.fecha_inicio + 'T00:00:00') : null;
+  const label = d ? capitalizar(d.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })) : 'Periodo';
+  return label + (p.estado === 'cerrado' ? ' (cerrado)' : '');
+}
+
+function cambiarPeriodoSeleccionado() {
+  periodoSeleccionado = document.getElementById('periodo-selector').value;
+  renderDetail();
+}
+
+async function renderDetail() {
+  const detailEl = document.getElementById('detail');
+  if (!selected) { detailEl.innerHTML = ''; return; }
+  const e = empresasCache.find(x => x.empresa_id === selected);
+  if (!e) { detailEl.innerHTML = ''; return; }
+  if (!periodoSeleccionado) {
+    detailEl.innerHTML = '<div class="p-10 text-center">' +
+      '<p class="text-sm text-on-surface-variant mb-4">"' + e.empresa_nombre + '" todavía no tiene un periodo generado para este ciclo.</p>' +
+      '<button id="btn-generar-periodo" onclick="generarPeriodoEmpresa()" class="px-5 py-3 rounded-xl bg-primary text-on-primary font-label text-sm font-semibold hover:bg-primary-container">Generar periodo</button>' +
+      '</div>';
+    return;
+  }
+  detailEl.innerHTML = '<p class="p-8 text-sm text-on-surface-variant">Cargando documentos...</p>';
+  const [{ data: periodoRow }, { data, error }] = await Promise.all([
+    sb.from('periodos').select('fecha_inicio, fecha_limite').eq('id', periodoSeleccionado).maybeSingle(),
+    sb.from('entregas').select('*, plantilla_documentos(nombre_documento, nombre_archivo, personas(nombre))').eq('periodo_id', periodoSeleccionado),
+  ]);
+  if (error) { detailEl.innerHTML = '<p class="p-8 text-sm text-error">Error al cargar documentos: ' + error.message + '</p>'; return; }
+  const fechaLimite = periodoRow ? periodoRow.fecha_limite : null;
+  const fechaInicioPeriodo = periodoRow ? periodoRow.fecha_inicio : null;
+  const docs = data || [];
+  docsPeriodoActualCache = docs;
+  const hoy = new Date().toISOString().slice(0,10);
+  detailEl.innerHTML =
+    '<div class="grid grid-cols-[2fr_1fr_1fr_auto] gap-4 px-10 py-5 bg-surface-container-low/50 text-xs font-label uppercase tracking-widest text-on-surface-variant">' +
+      '<div>Documento' + (fechaLimite ? ' — vence ' + fechaLimite : '') + '</div><div>Responsable</div><div>Estado</div><div class="text-right">Acción</div>' +
+    '</div>' +
+    (docs.length ? docs.map(d => {
+      const nombreDoc = d.plantilla_documentos ? d.plantilla_documentos.nombre_documento : 'Documento';
+      const nombreParaArchivo = (d.plantilla_documentos && d.plantilla_documentos.nombre_archivo) ? d.plantilla_documentos.nombre_archivo : nombreDoc;
+      const responsable = d.plantilla_documentos && d.plantilla_documentos.personas ? d.plantilla_documentos.personas.nombre : 'Sin asignar';
+      const atrasado = d.estado === 'pendiente' && fechaLimite && fechaLimite < hoy;
+      const estadoMostrar = d.estado === 'subido' ? 'subido' : (atrasado ? 'atrasado' : 'pendiente');
+      const nombreDescarga = nombreEstandarArchivo(e.empresa_nombre, nombreParaArchivo, fechaInicioPeriodo, extensionDeArchivo(d.archivo_nombre_original, d.archivo_path));
+      return '<div class="grid grid-cols-[2fr_1fr_1fr_auto] gap-4 px-10 py-5 items-center border-t border-outline-variant/15' + (d.estado === 'subido' ? ' bg-green-50' : '') + '">' +
+        '<div class="font-headline text-base font-medium text-on-surface flex items-center gap-2">' + nombreDoc +
+          (d.comentario ? '<button onclick="abrirModalVerComentario(\'' + d.id + '\')" title="Ver comentario del responsable" class="text-tertiary hover:text-primary shrink-0"><span class="material-symbols-outlined text-[18px]">chat</span></button>' : '') +
+        '</div>' +
+        '<div class="text-sm text-on-surface-variant">' + responsable + '</div>' +
+        '<div>' + statusDot(estadoMostrar) + '</div>' +
+        '<div class="text-right">' + (d.estado !== 'subido'
+          ? '<div class="flex items-center justify-end gap-2">' +
+              '<button onclick="abrirModalUpload(\'' + d.id + '\', \'' + e.empresa_nombre.replace(/'/g, "\\'") + '\', \'' + nombreDoc.replace(/'/g, "\\'") + '\', \'' + (fechaLimite || '') + '\', \'admin\')" class="px-4 py-2 rounded-full bg-primary text-on-primary font-label text-xs font-semibold hover:bg-primary-container transition-colors">Subir</button>' +
+              '<button class="px-4 py-2 rounded-full bg-surface-container-high text-on-surface font-label text-xs hover:bg-surface-container-highest transition-colors">Recordar</button>' +
+            '</div>'
+          : '<div class="flex items-center justify-end gap-2">' +
+              '<button onclick="descargarEntrega(\'' + d.archivo_path + '\', \'' + nombreDescarga.replace(/'/g, "\\'") + '\')" class="material-symbols-outlined text-on-surface-variant hover:text-primary cursor-pointer p-1" title="Descargar">download</button>' +
+              '<button onclick="cancelarSubidaEntrega(\'' + d.id + '\', \'admin\')" class="material-symbols-outlined text-on-surface-variant hover:text-error cursor-pointer p-1" title="Quitar archivo: regresa el documento a pendiente">close</button>' +
+              '<button onclick="abrirModalUpload(\'' + d.id + '\', \'' + e.empresa_nombre.replace(/'/g, "\\'") + '\', \'' + nombreDoc.replace(/'/g, "\\'") + '\', \'' + (fechaLimite || '') + '\', \'admin\', true)" class="px-3 py-1.5 rounded-full bg-surface-container-high text-on-surface font-label text-[11px] font-semibold hover:bg-surface-container-highest transition-colors">Reemplazar</button>' +
+            '</div>') + '</div>' +
+      '</div>';
+    }).join('') : '<p class="px-10 py-8 text-sm text-on-surface-variant">Sin documentos en este periodo.</p>');
+}
+
+async function descargarTodoPeriodo() {
+  if (!periodoSeleccionado) { alert('No hay periodo seleccionado.'); return; }
+  if (typeof JSZip === 'undefined') { alert('No se pudo cargar la librería de compresión (JSZip). Revisa tu conexión e intenta de nuevo.'); return; }
+
+  const btn = document.getElementById('btn-descargar-todo');
+  const textoOriginal = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="material-symbols-outlined text-[16px]">hourglass_top</span>Preparando...';
+
+  try {
+    const e = empresasCache.find(x => x.empresa_id === selected);
+    const { data, error } = await sb
+      .from('entregas')
+      .select('archivo_path, archivo_nombre_original, plantilla_documentos(nombre_documento, nombre_archivo)')
+      .eq('periodo_id', periodoSeleccionado)
+      .eq('estado', 'subido');
+
+    if (error) { alert('No se pudieron leer los documentos: ' + error.message); return; }
+    const conArchivo = (data || []).filter(d => d.archivo_path);
+    if (!conArchivo.length) { alert('Este periodo todavía no tiene documentos subidos.'); return; }
+
+    const zip = new JSZip();
+    const usados = {};
+    let fallos = 0;
+
+    for (const doc of conArchivo) {
+      try {
+        const { data: signed, error: signErr } = await sb.storage.from('documentos').createSignedUrl(doc.archivo_path, 60);
+        if (signErr) { fallos++; continue; }
+        const resp = await fetch(signed.signedUrl);
+        if (!resp.ok) { fallos++; continue; }
+        const blob = await resp.blob();
+        const nombreBase = ((doc.plantilla_documentos && (doc.plantilla_documentos.nombre_archivo || doc.plantilla_documentos.nombre_documento)) || 'documento').replace(/[\\/:*?"<>|]/g, '-');
+        const ext = ((doc.archivo_nombre_original || doc.archivo_path).split('.').pop() || 'bin');
+        let nombreFinal = nombreBase + '.' + ext;
+        let contador = usados[nombreBase] || 0;
+        while (zip.file(nombreFinal)) { contador++; nombreFinal = nombreBase + '-' + contador + '.' + ext; }
+        usados[nombreBase] = contador;
+        zip.file(nombreFinal, blob);
+      } catch (err) { fallos++; }
+    }
+
+    const blobZip = await zip.generateAsync({ type: 'blob' });
+    const periodoTexto = document.getElementById('periodo-selector').selectedOptions[0]
+      ? document.getElementById('periodo-selector').selectedOptions[0].textContent
+      : 'periodo';
+    const nombreZip = (e ? e.empresa_nombre : 'empresa').replace(/[\\/:*?"<>|]/g, '-') + '_' + periodoTexto.replace(/[\\/:*?"<>|]/g, '-') + '.zip';
+
+    const url = URL.createObjectURL(blobZip);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nombreZip;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+
+    if (fallos) alert('Se descargaron ' + (conArchivo.length - fallos) + ' de ' + conArchivo.length + ' documentos. ' + fallos + ' no se pudieron incluir.');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = textoOriginal;
+  }
+}
+
+async function descargarEntrega(path, nombreDescarga) {
+  if (!path) { alert('Este documento no tiene archivo asociado.'); return; }
+  const opciones = nombreDescarga ? { download: nombreDescarga } : undefined;
+  const { data, error } = await sb.storage.from('documentos').createSignedUrl(path, 60, opciones);
+  if (error) { alert('No se pudo generar el link de descarga: ' + error.message); return; }
+  window.open(data.signedUrl, '_blank');
+}
+
+function abrirModalVerComentario(entregaId) {
+  const d = docsPeriodoActualCache.find(x => x.id === entregaId);
+  if (!d || !d.comentario) return;
+  const nombreDoc = d.plantilla_documentos ? d.plantilla_documentos.nombre_documento : 'Documento';
+  const responsable = d.plantilla_documentos && d.plantilla_documentos.personas ? d.plantilla_documentos.personas.nombre : 'Sin asignar';
+  document.getElementById('mvc-documento').textContent = nombreDoc;
+  document.getElementById('mvc-meta').textContent = 'Comentario de ' + responsable;
+  document.getElementById('mvc-comentario').textContent = d.comentario;
+  document.getElementById('modal-ver-comentario').classList.remove('hidden');
+}
+
+function cerrarModalVerComentario() {
+  document.getElementById('modal-ver-comentario').classList.add('hidden');
+}
+
+function extensionDeArchivo(nombreOriginal, path) {
+  const fuente = nombreOriginal || path || '';
+  const partes = fuente.split('.');
+  return partes.length > 1 ? partes.pop() : 'bin';
+}
+
+// Nombre interno estandarizado para descargas, sin importar cómo la persona haya nombrado su archivo local.
+// Formato: "Empresa - Documento - Mes Año.ext"
+function nombreEstandarArchivo(empresaNombre, nombreDocumento, fechaReferencia, extension) {
+  const partes = [];
+  if (empresaNombre) partes.push(empresaNombre);
+  partes.push(nombreDocumento || 'Documento');
+  if (fechaReferencia) {
+    const d = new Date(fechaReferencia + 'T00:00:00');
+    partes.push(capitalizar(d.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })));
+  }
+  const base = partes.join(' - ').replace(/[\\/:*?"<>|]/g, '-');
+  return base + '.' + extension;
+}
+
+// ---------- Generación de periodo (a partir de la plantilla) ----------
+
+function calcularRangoPeriodo(frecuencia) {
+  const hoy = new Date();
+  let inicio, fin;
+  if (frecuencia === 'quincenal') {
+    if (hoy.getDate() <= 15) {
+      inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+      fin = new Date(hoy.getFullYear(), hoy.getMonth(), 15);
+    } else {
+      inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 16);
+      fin = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+    }
+  } else if (frecuencia === 'trimestral') {
+    const t = Math.floor(hoy.getMonth() / 3);
+    inicio = new Date(hoy.getFullYear(), t * 3, 1);
+    fin = new Date(hoy.getFullYear(), t * 3 + 3, 0);
+  } else if (frecuencia === 'anual') {
+    inicio = new Date(hoy.getFullYear(), 0, 1);
+    fin = new Date(hoy.getFullYear(), 11, 31);
+  } else { // mensual (default)
+    inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+    fin = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+  }
+  const fmt = d => d.toISOString().slice(0, 10);
+  return { inicio: fmt(inicio), fin: fmt(fin) };
+}
+
+async function generarPeriodoEmpresa() {
+  if (!selected) return;
+  const btn = document.getElementById('btn-generar-periodo');
+  if (btn) { btn.disabled = true; btn.textContent = 'Generando...'; }
+
+  const { data: empresaRow, error: empErr } = await sb.from('empresas').select('frecuencia').eq('id', selected).maybeSingle();
+  if (empErr) { alert('No se pudo leer la empresa: ' + empErr.message); if (btn) { btn.disabled = false; btn.textContent = 'Generar periodo'; } return; }
+
+  const { inicio, fin } = calcularRangoPeriodo(empresaRow ? empresaRow.frecuencia : 'mensual');
+
+  const { data: periodo, error: perErr } = await sb.from('periodos').insert({
+    empresa_id: selected,
+    fecha_inicio: inicio,
+    fecha_limite: fin,
+    estado: 'abierto',
+  }).select().single();
+  if (perErr) { alert('No se pudo crear el periodo: ' + perErr.message); if (btn) { btn.disabled = false; btn.textContent = 'Generar periodo'; } return; }
+
+  const { data: docsActivos, error: pdErr } = await sb
+    .from('plantilla_documentos')
+    .select('id')
+    .eq('empresa_id', selected)
+    .eq('activo', true);
+  if (pdErr) {
+    alert('El periodo se creó pero no se pudo leer la plantilla: ' + pdErr.message);
+  } else if (!docsActivos.length) {
+    alert('El periodo se creó, pero esta empresa todavía no tiene documentos activos en su plantilla (pestaña "Documentos requeridos").');
+  } else {
+    const filas = docsActivos.map(pd => ({ periodo_id: periodo.id, plantilla_documento_id: pd.id, estado: 'pendiente' }));
+    const { error: entErr } = await sb.from('entregas').insert(filas);
+    if (entErr) alert('El periodo se creó pero no se pudieron generar las entregas: ' + entErr.message);
+  }
+
+  if (btn) { btn.disabled = false; btn.textContent = 'Generar periodo'; }
+  periodoSeleccionado = periodo.id;
+  await fetchEmpresas();
+  renderGrid();
+}
+
+function selectEmpresa(id) {
+  if (selected !== id) tabDetalle = 'plantilla';
+  selected = id;
+  renderGrid();
+}
+
+function filterRS(rs) {
+  currentFilter = rs;
+  document.querySelectorAll('[id^="tab-"]').forEach(b => {
+    const activo = b.id === 'tab-' + rs;
+    b.className = 'px-5 py-2.5 rounded-full font-label text-xs font-semibold transition-colors ' +
+      (activo ? 'bg-primary text-on-primary shadow-md shadow-primary/20' : 'bg-surface-container-high text-on-surface hover:bg-surface-container-highest');
+  });
+  renderGrid();
+}
+
+async function renombrarEmpresa(id, actual) {
+  const nuevo = prompt('Nuevo nombre para la empresa:', actual);
+  if (!nuevo || nuevo.trim() === '' || nuevo === actual) return;
+  const { error } = await sb.from('empresas').update({ nombre: nuevo.trim() }).eq('id', id);
+  if (error) { alert('No se pudo renombrar: ' + error.message); return; }
+  await fetchEmpresas();
+  renderGrid();
+}
+
+function abrirModalEmpresa() {
+  if (!razonesSocialesCache.length) {
+    alert('Primero crea al menos una razón social en Configuración.');
+    return;
+  }
+  document.getElementById('me-razon-social').innerHTML = razonesSocialesCache.map(rs => '<option value="' + rs.id + '">' + rs.nombre + '</option>').join('');
+  document.getElementById('me-nombre').value = '';
+  document.getElementById('me-error').classList.add('hidden');
+  document.getElementById('modal-empresa').classList.remove('hidden');
+}
+function cerrarModalEmpresa() {
+  document.getElementById('modal-empresa').classList.add('hidden');
+}
+async function guardarNuevaEmpresa() {
+  const nombre = document.getElementById('me-nombre').value.trim();
+  const razonSocialId = document.getElementById('me-razon-social').value;
+  const frecuencia = document.getElementById('me-frecuencia').value;
+  const errEl = document.getElementById('me-error');
+  if (!nombre) { errEl.textContent = 'Ponle un nombre a la empresa.'; errEl.classList.remove('hidden'); return; }
+  const { error } = await sb.from('empresas').insert({ nombre, razon_social_id: razonSocialId, frecuencia });
+  if (error) { errEl.textContent = 'Error: ' + error.message; errEl.classList.remove('hidden'); return; }
+  cerrarModalEmpresa();
+  await fetchEmpresas();
+  renderRsTabs();
+}
+
+// ---------- Configuración: razones sociales ----------
+
+async function abrirConfig() {
+  await cargarCatalogos();
+  renderRsConfig();
+}
+
+function renderRsConfig() {
+  const cont = document.getElementById('rs-lista');
+  if (!razonesSocialesCache.length) {
+    cont.innerHTML = '<p class="text-sm text-on-surface-variant">Todavía no hay razones sociales. Agrega la primera abajo.</p>';
+    return;
+  }
+  cont.innerHTML = razonesSocialesCache.map(rs => (
+    '<div class="flex items-center justify-between py-3 border-b border-outline-variant/15 last:border-0 last:pb-0 first:pt-0">' +
+      '<span class="text-sm text-on-surface">' + rs.nombre + '</span>' +
+      '<button onclick="renombrarRazonSocial(\'' + rs.id + '\', \'' + rs.nombre.replace(/'/g, "\\'") + '\')" class="text-on-surface-variant hover:text-primary"><span class="material-symbols-outlined text-[18px]">edit</span></button>' +
+    '</div>'
+  )).join('');
+}
+
+async function crearRazonSocial() {
+  const input = document.getElementById('nueva-rs-nombre');
+  const nombre = input.value.trim();
+  if (!nombre) return;
+  const { error } = await sb.from('razones_sociales').insert({ nombre });
+  if (error) { alert('No se pudo crear: ' + error.message); return; }
+  input.value = '';
+  await cargarCatalogos();
+  renderRsConfig();
+}
+
+async function renombrarRazonSocial(id, actual) {
+  const nuevo = prompt('Nuevo nombre para la razón social:', actual);
+  if (!nuevo || nuevo.trim() === '' || nuevo === actual) return;
+  const { error } = await sb.from('razones_sociales').update({ nombre: nuevo.trim() }).eq('id', id);
+  if (error) { alert('No se pudo renombrar: ' + error.message); return; }
+  await cargarCatalogos();
+  renderRsConfig();
+}
+
+// ---------- Empresas → carpeta seleccionada: documentos requeridos (plantilla) ----------
+
+let plantillaEmpresaCache = [];
+let pdEditando = null;
+
+async function cargarPlantillaEmpresaSeleccionada() {
+  const cont = document.getElementById('pd-lista-empresa');
+  if (!selected) { cont.innerHTML = ''; return; }
+  cont.innerHTML = '<p class="text-sm text-on-surface-variant">Cargando...</p>';
+  const [{ data: empresaRow }, { data, error }] = await Promise.all([
+    sb.from('empresas').select('frecuencia').eq('id', selected).maybeSingle(),
+    sb.from('plantilla_documentos')
+      .select('*, personas(nombre)')
+      .eq('empresa_id', selected)
+      .order('orden', { ascending: true, nullsFirst: false })
+      .order('nombre_documento'),
+  ]);
+  document.getElementById('detail-frecuencia').textContent = empresaRow && empresaRow.frecuencia ? ('Frecuencia: ' + capitalizar(empresaRow.frecuencia)) : '';
+  if (error) { cont.innerHTML = '<p class="text-sm text-error">Error al cargar: ' + error.message + '</p>'; return; }
+  plantillaEmpresaCache = data || [];
+  renderPlantillaEmpresaSeleccionada();
+}
+
+function capitalizar(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
+
+function renderPlantillaEmpresaSeleccionada() {
+  const cont = document.getElementById('pd-lista-empresa');
+  if (!plantillaEmpresaCache.length) {
+    cont.innerHTML = '<div class="bg-surface-container-lowest rounded-2xl p-8 text-center shadow-sm"><p class="text-sm text-on-surface-variant">Esta empresa todavía no tiene documentos requeridos configurados.</p></div>';
+    return;
+  }
+  cont.innerHTML = '<div class="bg-surface-container-lowest rounded-2xl shadow-sm px-6">' +
+    plantillaEmpresaCache.map(pd => {
+      const inactivo = pd.activo === false;
+      return '<div class="flex items-center justify-between py-4 border-b border-outline-variant/15 last:border-0 gap-3">' +
+        '<div class="min-w-0 flex items-center gap-3">' +
+          '<span class="material-symbols-outlined text-on-surface-variant">description</span>' +
+          '<div class="min-w-0">' +
+            '<p class="text-sm font-medium text-on-surface truncate ' + (inactivo ? 'line-through text-on-surface-variant' : '') + '">' + pd.nombre_documento + '</p>' +
+            '<p class="text-xs text-on-surface-variant truncate">' + (pd.personas ? pd.personas.nombre : 'Sin responsable asignado') + '</p>' +
+            (pd.nombre_archivo ? '<p class="text-[10px] text-tertiary truncate mt-0.5">Archivo: ' + pd.nombre_archivo + '</p>' : '') +
+          '</div>' +
+        '</div>' +
+        '<div class="flex items-center gap-1 shrink-0">' +
+          '<button onclick="abrirModalPdNombreArchivo(\'' + pd.id + '\')" title="Nombre del archivo al descargar" class="text-on-surface-variant hover:text-primary p-1.5"><span class="material-symbols-outlined text-[18px]">drive_file_rename_outline</span></button>' +
+          '<button onclick="abrirModalPdPersona(\'' + pd.id + '\')" title="Cambiar responsable" class="text-on-surface-variant hover:text-primary p-1.5"><span class="material-symbols-outlined text-[18px]">person_edit</span></button>' +
+          '<button onclick="toggleActivoPlantillaDocumento(\'' + pd.id + '\', ' + (inactivo ? 'true' : 'false') + ')" title="' + (inactivo ? 'Reactivar: volver a pedir este documento en periodos futuros' : 'Desactivar: dejar de pedir este documento en periodos futuros (no borra lo ya subido)') + '" class="text-on-surface-variant hover:text-primary p-1.5"><span class="material-symbols-outlined text-[18px]">' + (inactivo ? 'unarchive' : 'archive') + '</span></button>' +
+        '</div>' +
+      '</div>';
+    }).join('') +
+  '</div>';
+}
+
+function poblarSelectPdPersona(sel) {
+  if (!sel) return;
+  sel.innerHTML = personasCache.length
+    ? personasCache.map(p => '<option value="' + p.id + '">' + p.nombre + '</option>').join('')
+    : '<option value="">No hay personas activas</option>';
+}
+
+function abrirModalNuevoDocRequerido() {
+  if (!selected) return;
+  const e = empresasCache.find(x => x.empresa_id === selected);
+  document.getElementById('mnd-empresa').textContent = e ? e.empresa_nombre : '';
+  poblarSelectPdPersona(document.getElementById('mnd-persona'));
+  document.getElementById('mnd-nombre').value = '';
+  document.getElementById('mnd-nombre-archivo').value = '';
+  const frecTexto = document.getElementById('detail-frecuencia').textContent;
+  document.getElementById('mnd-frecuencia-info').textContent = frecTexto
+    ? ('Esta empresa maneja documentación ' + frecTexto.replace('Frecuencia: ', '').toLowerCase() + '. Aplica a todos sus documentos.')
+    : 'La frecuencia la define la empresa, no cada documento.';
+  document.getElementById('mnd-error').classList.add('hidden');
+  document.getElementById('modal-nuevo-doc').classList.remove('hidden');
+}
+
+function cerrarModalNuevoDoc() {
+  document.getElementById('modal-nuevo-doc').classList.add('hidden');
+}
+
+async function guardarNuevoDocRequerido() {
+  if (!selected) return;
+  const nombre = document.getElementById('mnd-nombre').value.trim();
+  const personaId = document.getElementById('mnd-persona').value;
+  const nombreArchivo = document.getElementById('mnd-nombre-archivo').value.trim();
+  const errEl = document.getElementById('mnd-error');
+  errEl.classList.add('hidden');
+  if (!nombre) { errEl.textContent = 'Ponle un nombre al documento.'; errEl.classList.remove('hidden'); return; }
+  if (!personaId) { errEl.textContent = 'Selecciona quién debe entregarlo.'; errEl.classList.remove('hidden'); return; }
+  const { error } = await sb.from('plantilla_documentos').insert({
+    empresa_id: selected,
+    nombre_documento: nombre,
+    persona_responsable_id: personaId,
+    nombre_archivo: nombreArchivo || null,
+  });
+  if (error) { errEl.textContent = 'Error: ' + error.message; errEl.classList.remove('hidden'); return; }
+  cerrarModalNuevoDoc();
+  await cargarPlantillaEmpresaSeleccionada();
+}
+
+function abrirModalPdPersona(id) {
+  const pd = plantillaEmpresaCache.find(x => x.id === id);
+  if (!pd) return;
+  pdEditando = id;
+  document.getElementById('mpd-documento').textContent = pd.nombre_documento;
+  const sel = document.getElementById('mpd-persona');
+  poblarSelectPdPersona(sel);
+  if (pd.persona_responsable_id) sel.value = pd.persona_responsable_id;
+  document.getElementById('modal-pd-persona').classList.remove('hidden');
+}
+
+function cerrarModalPdPersona() {
+  document.getElementById('modal-pd-persona').classList.add('hidden');
+  pdEditando = null;
+}
+
+async function guardarPdPersona() {
+  if (!pdEditando) return;
+  const personaId = document.getElementById('mpd-persona').value;
+  if (!personaId) return;
+  const { error } = await sb.from('plantilla_documentos').update({ persona_responsable_id: personaId }).eq('id', pdEditando);
+  if (error) { alert('No se pudo reasignar: ' + error.message); return; }
+  cerrarModalPdPersona();
+  await cargarPlantillaEmpresaSeleccionada();
+}
+
+async function toggleActivoPlantillaDocumento(id, nuevoValor) {
+  const { error } = await sb.from('plantilla_documentos').update({ activo: nuevoValor }).eq('id', id);
+  if (error) { alert('No se pudo actualizar: ' + error.message); return; }
+  await cargarPlantillaEmpresaSeleccionada();
+}
+
+function abrirModalPdNombreArchivo(id) {
+  const pd = plantillaEmpresaCache.find(x => x.id === id);
+  if (!pd) return;
+  pdEditando = id;
+  document.getElementById('mna-documento').textContent = pd.nombre_documento;
+  document.getElementById('mna-input').value = pd.nombre_archivo || '';
+  actualizarPreviewNombreArchivo();
+  document.getElementById('modal-pd-nombrearchivo').classList.remove('hidden');
+}
+
+function actualizarPreviewNombreArchivo() {
+  const pd = plantillaEmpresaCache.find(x => x.id === pdEditando);
+  const e = empresasCache.find(x => x.empresa_id === selected);
+  const valor = document.getElementById('mna-input').value.trim();
+  const base = valor || (pd ? pd.nombre_documento : 'Documento');
+  const ejemplo = nombreEstandarArchivo(e ? e.empresa_nombre : 'Empresa', base, new Date().toISOString().slice(0, 10), 'pdf');
+  document.getElementById('mna-preview').textContent = 'Ejemplo: ' + ejemplo;
+}
+
+function cerrarModalPdNombreArchivo() {
+  document.getElementById('modal-pd-nombrearchivo').classList.add('hidden');
+  pdEditando = null;
+}
+
+async function guardarPdNombreArchivo() {
+  if (!pdEditando) return;
+  const valor = document.getElementById('mna-input').value.trim();
+  const { error } = await sb.from('plantilla_documentos').update({ nombre_archivo: valor || null }).eq('id', pdEditando);
+  if (error) { alert('No se pudo guardar: ' + error.message); return; }
+  cerrarModalPdNombreArchivo();
+  await cargarPlantillaEmpresaSeleccionada();
+}
+
+// ============================================================
+// MÓDULO DOCUMENTOS — vista del responsable externo
+// ============================================================
+
+let misEntregas = [];
+let entregaAbierta = null;
+let misDocsTab = 'pendientes';
+let empresasCerradas = new Set();
+
+async function cargarMisDocumentos() {
+  document.getElementById('upload-lista').innerHTML = '<p class="text-sm text-on-surface-variant text-center">Cargando...</p>';
+  const { data, error } = await sb
+    .from('entregas')
+    .select('*, plantilla_documentos!inner(nombre_documento, nombre_archivo, persona_responsable_id), periodos(fecha_inicio, fecha_limite, empresa_id, estado, empresas(nombre))')
+    .eq('plantilla_documentos.persona_responsable_id', currentPersona.id)
+    .order('id');
+  if (error) {
+    document.getElementById('upload-lista').innerHTML = '<p class="text-sm text-error text-center">Error al cargar tus documentos: ' + error.message + '</p>';
+    return;
+  }
+  misEntregas = data || [];
+  misDocsTab = 'pendientes';
+  renderMisDocumentos();
+}
+
+function esVencido(e) {
+  const hoy = new Date().toISOString().slice(0, 10);
+  const fechaLimite = e.periodos ? e.periodos.fecha_limite : null;
+  return e.estado === 'pendiente' && !!fechaLimite && fechaLimite < hoy;
+}
+
+function renderUploadTabs() {
+  const pendientes = misEntregas.filter(e => e.estado === 'pendiente' && !esVencido(e)).length;
+  const vencidos = misEntregas.filter(esVencido).length;
+  const tabs = [
+    { id: 'pendientes', label: 'Pendientes', count: pendientes },
+    { id: 'vencidos', label: 'Vencidos', count: vencidos },
+    { id: 'historial', label: 'Historial', count: 0 },
+  ];
+  document.getElementById('upload-tabs').innerHTML = tabs.map(t => {
+    const activa = misDocsTab === t.id;
+    return '<button onclick="cambiarMisDocsTab(\'' + t.id + '\')" class="px-4 py-2 rounded-full font-label text-xs font-semibold transition-colors flex items-center gap-1.5 ' +
+      (activa ? (t.id === 'vencidos' ? 'bg-error text-on-error' : 'bg-primary text-on-primary') : 'bg-surface-container-high text-on-surface hover:bg-surface-container-highest') + '">' +
+      t.label + (t.count ? ' <span class="rounded-full px-1.5 ' + (activa ? 'bg-white/25' : 'bg-surface-container-highest') + '">' + t.count + '</span>' : '') +
+    '</button>';
+  }).join('');
+}
+
+function badgeFecha(fechaLimite, estilo) {
+  const clases = {
+    vencido: 'bg-error text-on-error',
+    pendiente: 'bg-primary/10 text-primary',
+    subido: 'bg-green-100 text-green-700',
+  };
+  if (!fechaLimite) {
+    return '<div class="w-14 h-14 rounded-2xl bg-surface-container-high flex items-center justify-center shrink-0"><span class="material-symbols-outlined text-[20px] text-on-surface-variant">event_busy</span></div>';
+  }
+  const d = new Date(fechaLimite + 'T00:00:00');
+  const dia = d.getDate();
+  const mes = d.toLocaleDateString('es-MX', { month: 'short' }).replace('.', '').toUpperCase();
+  return '<div class="w-14 h-14 rounded-2xl ' + (clases[estilo] || clases.pendiente) + ' flex flex-col items-center justify-center shrink-0">' +
+    '<span class="text-lg font-headline font-bold leading-none">' + dia + '</span>' +
+    '<span class="text-[9px] font-label uppercase tracking-wide mt-0.5">' + mes + '</span>' +
+  '</div>';
+}
+
+function filaDocumento(e, mostrarEmpresa, estiloLista) {
+  const nombreDoc = e.plantilla_documentos ? e.plantilla_documentos.nombre_documento : 'Documento';
+  const nombreParaArchivo = (e.plantilla_documentos && e.plantilla_documentos.nombre_archivo) ? e.plantilla_documentos.nombre_archivo : nombreDoc;
+  const empresaNombre = e.periodos && e.periodos.empresas ? e.periodos.empresas.nombre : '';
+  const fechaLimite = e.periodos ? e.periodos.fecha_limite : null;
+  const fechaInicio = e.periodos ? e.periodos.fecha_inicio : null;
+  const vencido = esVencido(e);
+  const subido = e.estado === 'subido';
+  const badgeEstilo = subido ? 'subido' : (vencido ? 'vencido' : 'pendiente');
+
+  let accion;
+  if (subido) {
+    const nombreDescarga = nombreEstandarArchivo(empresaNombre, nombreParaArchivo, fechaInicio, extensionDeArchivo(e.archivo_nombre_original, e.archivo_path));
+    accion = '<div class="flex items-center gap-1 shrink-0">' +
+      '<button onclick="descargarEntrega(\'' + e.archivo_path + '\', \'' + nombreDescarga.replace(/'/g, "\\'") + '\')" title="Descargar" class="text-on-surface-variant hover:text-primary p-2"><span class="material-symbols-outlined text-[18px]">download</span></button>' +
+      '<button onclick="cancelarSubidaEntrega(\'' + e.id + '\', \'responsable\')" title="Quitar archivo: regresa el documento a pendiente" class="text-on-surface-variant hover:text-error p-2"><span class="material-symbols-outlined text-[18px]">close</span></button>' +
+      '<button onclick="abrirModalUpload(\'' + e.id + '\', \'' + (empresaNombre || '').replace(/'/g, "\\'") + '\', \'' + nombreDoc.replace(/'/g, "\\'") + '\', \'' + (fechaLimite || '') + '\', \'responsable\', true)" class="px-3 py-2 rounded-full bg-surface-container-high text-on-surface font-label text-xs font-semibold hover:bg-surface-container-highest transition-colors">Reemplazar</button>' +
+    '</div>';
+  } else {
+    accion = '<button onclick="abrirModalUpload(\'' + e.id + '\', \'' + (empresaNombre || '').replace(/'/g, "\\'") + '\', \'' + nombreDoc.replace(/'/g, "\\'") + '\', \'' + (fechaLimite || '') + '\', \'responsable\')" class="shrink-0 px-4 py-2 rounded-full ' + (vencido ? 'bg-error text-on-error' : 'bg-primary text-on-primary') + ' font-label text-xs font-semibold hover:opacity-90 transition-opacity">Subir</button>';
+  }
+
+  const contenedorClases = estiloLista
+    ? 'flex items-center gap-4 px-6 py-4 border-b border-outline-variant/10 last:border-0' + (subido ? ' bg-green-50' : '')
+    : 'flex items-center gap-4 rounded-2xl shadow-sm p-4' + (subido ? ' bg-green-50 ring-1 ring-green-200' : ' bg-surface-container-lowest') + (vencido ? ' ring-1 ring-error/30' : '');
+
+  return '<div class="' + contenedorClases + '">' +
+    badgeFecha(fechaLimite, badgeEstilo) +
+    '<div class="min-w-0 flex-1">' +
+      '<div class="flex items-center gap-2 flex-wrap">' +
+        '<p class="text-sm font-medium text-on-surface truncate">' + nombreDoc + '</p>' +
+        (vencido ? '<span class="text-[9px] font-label font-bold uppercase tracking-wide text-error bg-error/10 rounded-full px-2 py-0.5 shrink-0">Vencido</span>' : '') +
+        (subido ? '<span class="text-[9px] font-label font-bold uppercase tracking-wide text-green-700 bg-green-100 rounded-full px-2 py-0.5 shrink-0">Subido</span>' : '') +
+      '</div>' +
+      (mostrarEmpresa !== false ? '<p class="text-xs text-on-surface-variant mt-0.5 truncate">' + empresaNombre + '</p>' : '') +
+    '</div>' +
+    accion +
+  '</div>';
+}
+
+function agruparPorEmpresa(lista) {
+  const grupos = {};
+  const orden = [];
+  lista.forEach(e => {
+    const id = e.periodos ? e.periodos.empresa_id : 'sin-empresa';
+    const nombre = e.periodos && e.periodos.empresas ? e.periodos.empresas.nombre : 'Sin empresa';
+    if (!grupos[id]) { grupos[id] = { id, nombre, items: [] }; orden.push(id); }
+    grupos[id].items.push(e);
+  });
+  return orden.map(id => grupos[id]);
+}
+
+function renderPendientesAgrupados(lista) {
+  const grupos = agruparPorEmpresa(lista);
+  if (!grupos.length) {
+    return '<div class="bg-surface-container-lowest rounded-3xl shadow-sm p-8 text-center text-sm text-on-surface-variant">No tienes documentos pendientes por el momento. 🎉</div>';
+  }
+  return grupos.map(g => {
+    const abierto = !empresasCerradas.has(g.id);
+    return '<div class="bg-surface-container-lowest rounded-3xl shadow-sm overflow-hidden">' +
+      '<button onclick="toggleEmpresaAbierta(\'' + g.id + '\')" class="w-full flex items-center justify-between px-6 py-4">' +
+        '<span class="flex items-center gap-2 font-headline font-semibold text-on-surface"><span class="material-symbols-outlined text-[18px] text-on-surface-variant">folder</span>' + g.nombre + '<span class="text-xs font-normal text-on-surface-variant">(' + g.items.length + ')</span></span>' +
+        '<span class="material-symbols-outlined text-on-surface-variant transition-transform" style="' + (abierto ? '' : 'transform:rotate(-90deg)') + '">expand_more</span>' +
+      '</button>' +
+      (abierto ? '<div class="flex flex-col border-t border-outline-variant/15">' + g.items.map(e => filaDocumento(e, false, true)).join('') + '</div>' : '') +
+    '</div>';
+  }).join('');
+}
+
+function toggleEmpresaAbierta(id) {
+  if (empresasCerradas.has(id)) empresasCerradas.delete(id); else empresasCerradas.add(id);
+  renderMisDocumentos();
+}
+
+function capitalizarTexto(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
+
+function agruparHistorial(lista) {
+  const porEmpresa = {};
+  const ordenEmpresa = [];
+  lista.forEach(e => {
+    const empresaId = e.periodos ? e.periodos.empresa_id : 'sin-empresa';
+    const empresaNombre = e.periodos && e.periodos.empresas ? e.periodos.empresas.nombre : 'Sin empresa';
+    const periodoId = e.periodo_id || 'sin-periodo';
+    const fechaInicio = e.periodos ? e.periodos.fecha_inicio : '';
+    if (!porEmpresa[empresaId]) { porEmpresa[empresaId] = { nombre: empresaNombre, periodos: {}, ordenPeriodo: [] }; ordenEmpresa.push(empresaId); }
+    const emp = porEmpresa[empresaId];
+    if (!emp.periodos[periodoId]) {
+      const d = fechaInicio ? new Date(fechaInicio + 'T00:00:00') : null;
+      emp.periodos[periodoId] = { label: d ? capitalizarTexto(d.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })) : 'Periodo', fechaInicio: fechaInicio || '', items: [] };
+      emp.ordenPeriodo.push(periodoId);
+    }
+    emp.periodos[periodoId].items.push(e);
+  });
+  return ordenEmpresa.map(id => {
+    const emp = porEmpresa[id];
+    const periodosOrdenados = emp.ordenPeriodo
+      .map(pid => emp.periodos[pid])
+      .sort((a, b) => (b.fechaInicio || '').localeCompare(a.fechaInicio || ''));
+    return { nombre: emp.nombre, periodos: periodosOrdenados };
+  });
+}
+
+function filaHistorial(e) {
+  const nombreDoc = e.plantilla_documentos ? e.plantilla_documentos.nombre_documento : 'Documento';
+  const vencido = esVencido(e);
+  let estadoTxt, estadoClase;
+  if (e.estado === 'subido') {
+    estadoTxt = 'Subido' + (e.fecha_subida ? ' el ' + e.fecha_subida.slice(0, 10) : '');
+    estadoClase = 'text-primary';
+  } else if (vencido) {
+    estadoTxt = 'No entregado';
+    estadoClase = 'text-error font-semibold';
+  } else {
+    estadoTxt = 'Pendiente';
+    estadoClase = 'text-tertiary';
+  }
+  const empresaNombre = e.periodos && e.periodos.empresas ? e.periodos.empresas.nombre : '';
+  const fechaInicioPeriodo = e.periodos ? e.periodos.fecha_inicio : null;
+  const nombreParaArchivo = (e.plantilla_documentos && e.plantilla_documentos.nombre_archivo) ? e.plantilla_documentos.nombre_archivo : nombreDoc;
+  const botonDescarga = (e.estado === 'subido' && e.archivo_path)
+    ? '<button onclick="descargarEntrega(\'' + e.archivo_path + '\', \'' + nombreEstandarArchivo(empresaNombre, nombreParaArchivo, fechaInicioPeriodo, extensionDeArchivo(e.archivo_nombre_original, e.archivo_path)).replace(/'/g, "\\'") + '\')" title="Descargar" class="text-on-surface-variant hover:text-primary shrink-0"><span class="material-symbols-outlined text-[16px] block">download</span></button>'
+    : '';
+  return '<div class="flex items-center justify-between gap-3 text-sm py-1.5">' +
+    '<span class="text-on-surface truncate">' + nombreDoc + '</span>' +
+    '<span class="flex items-center gap-2 shrink-0">' +
+      '<span class="text-xs ' + estadoClase + '">' + estadoTxt + '</span>' +
+      botonDescarga +
+    '</span>' +
+  '</div>';
+}
+
+function renderHistorialDocumentos(lista) {
+  const grupos = agruparHistorial(lista);
+  if (!grupos.length) {
+    return '<div class="bg-surface-container-lowest rounded-3xl shadow-sm p-8 text-center text-sm text-on-surface-variant">Todavía no hay historial que mostrar.</div>';
+  }
+  return grupos.map(g => (
+    '<div class="bg-surface-container-lowest rounded-3xl shadow-sm p-6">' +
+      '<h3 class="font-headline font-semibold text-on-surface mb-4 flex items-center gap-2"><span class="material-symbols-outlined text-[18px] text-on-surface-variant">folder</span>' + g.nombre + '</h3>' +
+      g.periodos.map(p => (
+        '<div class="mb-4 last:mb-0">' +
+          '<p class="text-[10px] font-label uppercase tracking-widest text-on-surface-variant mb-1.5">' + p.label + '</p>' +
+          '<div class="flex flex-col divide-y divide-outline-variant/10">' + p.items.map(filaHistorial).join('') + '</div>' +
+        '</div>'
+      )).join('') +
+    '</div>'
+  )).join('');
+}
+
+function cambiarMisDocsTab(tab) {
+  misDocsTab = tab;
+  renderMisDocumentos();
+}
+
+function renderMisDocumentos() {
+  renderUploadTabs();
+  const cont = document.getElementById('upload-lista');
+  if (misDocsTab === 'pendientes') {
+    const lista = misEntregas.filter(e => {
+      const periodoAbierto = e.periodos && e.periodos.estado === 'abierto';
+      if (!periodoAbierto) return false;
+      if (e.estado === 'subido') return true;
+      return e.estado === 'pendiente' && !esVencido(e);
+    });
+    cont.innerHTML = renderPendientesAgrupados(lista);
+  } else if (misDocsTab === 'vencidos') {
+    const lista = misEntregas.filter(esVencido).sort((a, b) => {
+      const fa = a.periodos ? a.periodos.fecha_limite : '';
+      const fb = b.periodos ? b.periodos.fecha_limite : '';
+      return (fa || '').localeCompare(fb || '');
+    });
+    cont.innerHTML = lista.length
+      ? lista.map(e => filaDocumento(e, true)).join('')
+      : '<div class="bg-surface-container-lowest rounded-3xl shadow-sm p-8 text-center text-sm text-on-surface-variant">No tienes documentos vencidos. 🎉</div>';
+  } else {
+    cont.innerHTML = renderHistorialDocumentos(misEntregas);
+  }
+}
+
+let contextoSubida = 'responsable';
+
+let comentarioActivo = false;
+
+function abrirModalUpload(entregaId, nombreEmpresa, nombreDocumento, fechaLimite, contexto, esReemplazo) {
+  entregaAbierta = entregaId;
+  contextoSubida = contexto || 'responsable';
+  document.getElementById('mu-empresa').textContent = nombreEmpresa || '';
+  document.getElementById('mu-documento').textContent = nombreDocumento || 'Documento';
+  document.getElementById('mu-vencimiento').querySelector('span').textContent =
+    fechaLimite ? ('Vence el ' + fechaLimite) : 'Sin fecha límite';
+  document.getElementById('file').value = '';
+  document.getElementById('filename').style.display = 'none';
+  document.getElementById('mu-error').classList.add('hidden');
+  document.getElementById('mu-submit').textContent = esReemplazo ? 'Reemplazar documento' : 'Subir documento';
+
+  let comentarioExistente = '';
+  const fuente = contextoSubida === 'admin' ? docsPeriodoActualCache : misEntregas;
+  const entregaActual = (fuente || []).find(x => x.id === entregaId);
+  if (entregaActual && entregaActual.comentario) comentarioExistente = entregaActual.comentario;
+
+  comentarioActivo = !!comentarioExistente;
+  document.getElementById('mu-comentario-texto').value = comentarioExistente;
+  document.getElementById('mu-comentario-check').classList.toggle('bg-primary', comentarioActivo);
+  document.getElementById('mu-comentario-check').classList.toggle('border-primary', comentarioActivo);
+  document.getElementById('mu-comentario-check-icon').classList.toggle('hidden', !comentarioActivo);
+  document.getElementById('mu-comentario-slot').classList.toggle('hidden', !comentarioActivo);
+
+  document.getElementById('modal-upload').classList.remove('hidden');
+}
+
+function toggleComentarioUpload() {
+  comentarioActivo = !comentarioActivo;
+  document.getElementById('mu-comentario-check').classList.toggle('bg-primary', comentarioActivo);
+  document.getElementById('mu-comentario-check').classList.toggle('border-primary', comentarioActivo);
+  document.getElementById('mu-comentario-check-icon').classList.toggle('hidden', !comentarioActivo);
+  document.getElementById('mu-comentario-slot').classList.toggle('hidden', !comentarioActivo);
+  if (comentarioActivo) document.getElementById('mu-comentario-texto').focus();
+}
+
+function cerrarModalUpload() {
+  document.getElementById('modal-upload').classList.add('hidden');
+  entregaAbierta = null;
+}
+
+async function confirmarSubida() {
+  const fileInput = document.getElementById('file');
+  const errBox = document.getElementById('mu-error');
+  const errText = document.getElementById('mu-error-text');
+  errBox.classList.add('hidden');
+
+  if (!fileInput.files.length) {
+    errText.textContent = 'Selecciona un archivo primero.';
+    errBox.classList.remove('hidden');
+    return;
+  }
+  const file = fileInput.files[0];
+  const btn = document.getElementById('mu-submit');
+  const textoOriginal = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Subiendo...';
+
+  const nombreLimpio = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const path = entregaAbierta + '/' + Date.now() + '_' + nombreLimpio;
+
+  const { error: upErr } = await sb.storage.from('documentos').upload(path, file, { upsert: false });
+  if (upErr) {
+    errText.textContent = 'No se pudo subir el archivo: ' + upErr.message;
+    errBox.classList.remove('hidden');
+    btn.disabled = false; btn.textContent = textoOriginal;
+    return;
+  }
+
+  const { error: updErr } = await sb.from('entregas').update({
+    estado: 'subido',
+    archivo_path: path,
+    archivo_nombre_original: file.name,
+    subido_por: currentPersona.id,
+    fecha_subida: new Date().toISOString(),
+    comentario: comentarioActivo ? (document.getElementById('mu-comentario-texto').value.trim() || null) : null
+  }).eq('id', entregaAbierta);
+
+  btn.disabled = false; btn.textContent = textoOriginal;
+
+  if (updErr) {
+    errText.textContent = 'El archivo se subió pero no se pudo actualizar el registro: ' + updErr.message;
+    errBox.classList.remove('hidden');
+    return;
+  }
+
+  cerrarModalUpload();
+  if (contextoSubida === 'admin') {
+    await renderDetail();
+  } else {
+    await cargarMisDocumentos();
+  }
+}
+
+async function cancelarSubidaEntrega(id, contexto) {
+  const confirmado = confirm('¿Quitar este archivo? El documento vuelve a quedar como pendiente. El archivo no se borra del almacenamiento, solo se desvincula de este documento.');
+  if (!confirmado) return;
+  const { error } = await sb.from('entregas').update({
+    estado: 'pendiente',
+    archivo_path: null,
+    archivo_nombre_original: null,
+    subido_por: null,
+    fecha_subida: null,
+    comentario: null,
+  }).eq('id', id);
+  if (error) { alert('No se pudo quitar el archivo: ' + error.message); return; }
+  if (contexto === 'admin') {
+    await renderDetail();
+  } else {
+    await cargarMisDocumentos();
+  }
+}
+
+// ============================================================
+// MÓDULO GASTOS
+// ============================================================
+
+function gastosToggleRep() {
+  document.getElementById('rep-wrap').style.display = document.getElementById('f-metodo').value === 'PPD' ? 'block' : 'none';
+}
+
+async function gastosValidarCaptura() {
+  const required = ['f-marca','f-rubro','f-concepto','f-monto','f-razon-social','f-metodo'];
+  let faltan = [];
+  required.forEach(id => {
+    const el = document.getElementById(id);
+    el.classList.remove('field-error');
+    if (!el.value) { el.classList.add('field-error'); faltan.push(id); }
+  });
+  if (document.getElementById('f-metodo').value === 'PPD') {
+    const rep = document.getElementById('f-rep');
+    rep.classList.remove('field-error');
+    if (!rep.value) { rep.classList.add('field-error'); faltan.push('f-rep'); }
+  }
+  const errBox = document.getElementById('form-error');
+  const errText = document.getElementById('form-error-text');
+  if (faltan.length) {
+    errText.textContent = 'Faltan ' + faltan.length + ' campo(s) obligatorio(s) — no se puede guardar así.';
+    errBox.classList.remove('hidden');
+    return;
+  }
+
+  const payload = {
+    marca_id: document.getElementById('f-marca').value,
+    rubro: document.getElementById('f-rubro').value,
+    concepto: document.getElementById('f-concepto').value,
+    monto: parseFloat(document.getElementById('f-monto').value),
+    proveedor_nombre_comercial: document.getElementById('f-nombre-comercial').value || null,
+    proveedor_razon_social: document.getElementById('f-razon-social').value,
+    metodo_pago: document.getElementById('f-metodo').value,
+    factura: document.getElementById('f-factura').value || null,
+    rep: document.getElementById('f-rep').value || null,
+    registrado_por: currentPersona.id,
+  };
+
+  const { error } = await sb.from('gastos').insert(payload);
+  if (error) {
+    errText.textContent = 'No se pudo guardar: ' + error.message;
+    errBox.classList.remove('hidden');
+    return;
+  }
+
+  errBox.classList.add('hidden');
+  ['f-concepto','f-monto','f-nombre-comercial','f-razon-social','f-factura','f-rep'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('f-rubro').value = '';
+  document.getElementById('f-metodo').value = '';
+  gastosToggleRep();
+  alert('Gasto registrado correctamente.');
+}
+
+const gastos = [
+  { id:1, mes:'2026-08', marca:'Marca A', rubro:'Renta', concepto:'Renta de bodega', monto:8500, proveedor:'Inmobiliaria del Bajío', metodo:'PUE', rep:null, pagado:false },
+  { id:2, mes:'2026-08', marca:'Marca A', rubro:'Nóminas', concepto:'Nómina quincenal', monto:45000, proveedor:null, metodo:null, rep:null, pagado:false },
+  { id:3, mes:'2026-08', marca:'Marca A', rubro:'Gasolina', concepto:'Gasolina camionetas', monto:3200, proveedor:'Combustibles del Bajío', metodo:'PPD', rep:null, pagado:false },
+  { id:4, mes:'2026-08', marca:'Marca B', rubro:'Marketing', concepto:'Publicidad Meta Ads', monto:6000, proveedor:'Meta Platforms', metodo:'PUE', rep:null, pagado:false },
+  { id:5, mes:'2026-08', marca:'Marca B', rubro:'Insumos', concepto:'Insumos de fumigación', monto:12300, proveedor:'Química Industrial SA', metodo:'PPD', rep:'REP-00981', pagado:false },
+  { id:6, mes:'2026-08', marca:'Marca C', rubro:'Renta', concepto:'Renta de oficina', monto:9800, proveedor:'Bienes Raíces Sur', metodo:'PUE', rep:null, pagado:true },
+  { id:7, mes:'2026-07', marca:'Marca A', rubro:'Renta', concepto:'Renta de bodega', monto:8500, proveedor:'Inmobiliaria del Bajío', metodo:'PUE', rep:null, pagado:true },
+  { id:8, mes:'2026-07', marca:'Marca A', rubro:'Nóminas', concepto:'Nómina quincenal', monto:44000, proveedor:'Nómina interna', metodo:'PUE', rep:null, pagado:true },
+  { id:9, mes:'2026-07', marca:'Marca B', rubro:'Marketing', concepto:'Publicidad Google Ads', monto:5200, proveedor:'Google Ads', metodo:'PUE', rep:null, pagado:true },
+  { id:10, mes:'2026-07', marca:'Marca C', rubro:'Otro', concepto:'Mantenimiento vehículos', monto:2100, proveedor:'Taller Mecánico Reyes', metodo:'PPD', rep:'REP-00754', pagado:false },
+  { id:11, mes:'2026-06', marca:'Marca A', rubro:'Renta', concepto:'Renta de bodega', monto:8500, proveedor:'Inmobiliaria del Bajío', metodo:'PUE', rep:null, pagado:true },
+  { id:12, mes:'2026-06', marca:'Marca B', rubro:'Insumos', concepto:'Insumos de fumigación', monto:10800, proveedor:'Química Industrial SA', metodo:'PPD', rep:'REP-00612', pagado:true },
+  { id:13, mes:'2026-06', marca:'Marca C', rubro:'Renta', concepto:'Renta de oficina', monto:9800, proveedor:'Bienes Raíces Sur', metodo:'PUE', rep:null, pagado:true },
+];
+let filtroMarca = 'todas';
+let filtroMesHist = '2026-08';
+let filtroMarcaHist = 'todas';
+
+function gastoProveedor(g) {
+  return g.proveedor_nombre_comercial || g.proveedor_razon_social || null;
+}
+
+function listoParaPagar(g) {
+  if (!g.rubro || !gastoProveedor(g) || !g.metodo_pago) return false;
+  if (g.metodo_pago === 'PPD' && !g.rep) return false;
+  return true;
+}
+function faltantes(g) {
+  const f = [];
+  if (!gastoProveedor(g)) f.push('proveedor');
+  if (!g.metodo_pago) f.push('método de pago');
+  if (g.metodo_pago === 'PPD' && !g.rep) f.push('REP');
+  return f;
+}
+
+let gastosDelMesActual = [];
+
+function rangoMesActual() {
+  const hoy = new Date();
+  const inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().slice(0,10);
+  const fin = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).toISOString().slice(0,10);
+  return { inicio, fin };
+}
+
+async function fetchGastosChecklist() {
+  const { inicio, fin } = rangoMesActual();
+  const { data, error } = await sb
+    .from('gastos')
+    .select('*, marcas(nombre)')
+    .gte('fecha_registro', inicio)
+    .lte('fecha_registro', fin)
+    .order('created_at', { ascending: true });
+  if (error) { console.error(error); gastosDelMesActual = []; return; }
+  gastosDelMesActual = data || [];
+}
+
+async function renderGastosTabs() {
+  document.getElementById('lista-gastos').innerHTML = '<p class="text-sm text-on-surface-variant">Cargando...</p>';
+  await fetchGastosChecklist();
+  const marcas = ['todas', ...new Set(gastosDelMesActual.map(g => g.marcas ? g.marcas.nombre : 'Sin marca'))];
+  document.getElementById('marca-tabs').innerHTML = marcas.map(m => (
+    '<button onclick="gastosFiltrarMarca(\'' + m + '\')" id="mtab-' + m + '" class="px-4 py-2 rounded-full font-label text-xs font-semibold transition-colors">' + (m === 'todas' ? 'Todas' : m) + '</button>'
+  )).join('');
+  gastosFiltrarMarca('todas');
+}
+
+function gastosFiltrarMarca(m) {
+  filtroMarca = m;
+  document.querySelectorAll('[id^="mtab-"]').forEach(b => {
+    const active = b.id === 'mtab-' + m;
+    b.className = 'px-4 py-2 rounded-full font-label text-xs font-semibold transition-colors ' +
+      (active ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface hover:bg-surface-container-highest');
+  });
+  renderGastosLista();
+}
+
+function renderGastosLista() {
+  const list = gastosDelMesActual.filter(g => filtroMarca === 'todas' || (g.marcas && g.marcas.nombre === filtroMarca));
+  const pendientes = list.filter(g => g.estado !== 'pagado');
+  const totalPendiente = pendientes.reduce((s,g) => s + Number(g.monto), 0);
+  const listos = pendientes.filter(listoParaPagar).length;
+  document.getElementById('total-pendiente').textContent = '$' + totalPendiente.toLocaleString('es-MX');
+  document.getElementById('cuenta-listos').textContent = listos + '/' + pendientes.length;
+
+  document.getElementById('lista-gastos').innerHTML = list.map(g => {
+    const pagado = g.estado === 'pagado';
+    const listo = listoParaPagar(g);
+    const falt = faltantes(g);
+    const nombreMarca = g.marcas ? g.marcas.nombre : 'Sin marca';
+    const proveedor = gastoProveedor(g);
+    return '<div class="bg-surface-container-lowest rounded-2xl shadow-sm p-5 flex items-center justify-between ' + (pagado ? 'opacity-50' : '') + '">' +
+      '<div class="flex-1 min-w-0">' +
+        '<div class="flex items-center gap-2 mb-1">' +
+          '<p class="font-headline font-medium text-on-surface ' + (pagado ? 'line-through' : '') + '">' + g.concepto + '</p>' +
+          '<span class="text-[10px] font-label uppercase tracking-wider text-on-surface-variant bg-surface-container-high px-2 py-0.5 rounded-md">' + (g.rubro || 'Sin rubro') + '</span>' +
+        '</div>' +
+        '<p class="text-xs text-on-surface-variant">' + nombreMarca + (proveedor ? ' · ' + proveedor : '') + '</p>' +
+        (!pagado && !listo ? '<p class="text-xs text-error mt-1 flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">warning</span>Falta: ' + falt.join(', ') + '</p>' : '') +
+      '</div>' +
+      '<div class="flex items-center gap-4 pl-4">' +
+        '<p class="font-headline font-semibold text-on-surface">$' + Number(g.monto).toLocaleString('es-MX') + '</p>' +
+        (pagado
+          ? '<span class="inline-flex items-center gap-1 text-xs font-label font-semibold text-primary"><span class="material-symbols-outlined text-[16px]">check_circle</span>Pagado</span>'
+          : listo
+            ? '<button onclick="gastosMarcarPagado(\'' + g.id + '\')" class="px-4 py-2 rounded-full bg-primary text-on-primary font-label text-xs font-semibold hover:bg-primary-container transition-colors">Marcar pagado</button>'
+            : '<button disabled class="px-4 py-2 rounded-full bg-surface-container-high text-on-surface-variant font-label text-xs cursor-not-allowed">Falta info</button>'
+        ) +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+async function gastosMarcarPagado(id) {
+  const hoy = new Date().toISOString().slice(0,10);
+  const { error } = await sb.from('gastos').update({
+    estado: 'pagado',
+    pagado_por: currentPersona.id,
+    fecha_pago: hoy
+  }).eq('id', id);
+  if (error) { alert('No se pudo marcar como pagado: ' + error.message); return; }
+  await fetchGastosChecklist();
+  renderGastosLista();
+}
+
+async function gastosGenerarCorte() {
+  if (filtroMarca === 'todas') {
+    alert('Selecciona primero una marca específica para generar su corte de mes.');
+    return;
+  }
+  const ejemplo = gastosDelMesActual.find(g => g.marcas && g.marcas.nombre === filtroMarca);
+  if (!ejemplo) return;
+  const { inicio } = rangoMesActual();
+  const { data, error } = await sb.rpc('generar_corte_mes', { p_marca_id: ejemplo.marca_id, p_mes: inicio });
+  if (error) { alert('Error al generar el corte: ' + error.message); return; }
+  document.getElementById('corte-resumen').classList.remove('hidden');
+  document.getElementById('corte-resumen-body').innerHTML =
+    '<p class="mb-2"><span class="font-semibold text-on-surface">' + data.cantidad_pagados + '</span> pagados por un total de <span class="font-semibold text-on-surface">$' + Number(data.total_pagado).toLocaleString('es-MX') + '</span></p>' +
+    '<p><span class="font-semibold text-error">' + data.cantidad_pendientes + '</span> pendientes por <span class="font-semibold text-error">$' + Number(data.total_pendiente).toLocaleString('es-MX') + '</span></p>';
+}
+
+const meses = [
+  { key:'2026-08', label:'Agosto 2026' },
+  { key:'2026-07', label:'Julio 2026' },
+  { key:'2026-06', label:'Junio 2026' },
+];
+
+function renderMesTabs() {
+  document.getElementById('mes-tabs').innerHTML = meses.map(m => (
+    '<button onclick="gastosFiltrarMesHist(\'' + m.key + '\')" id="mestab-' + m.key + '" class="px-4 py-2 rounded-full font-label text-xs font-semibold transition-colors">' + m.label + '</button>'
+  )).join('');
+  gastosFiltrarMesHist(filtroMesHist);
+}
+
+function gastosFiltrarMesHist(mes) {
+  filtroMesHist = mes;
+  meses.forEach(m => {
+    const b = document.getElementById('mestab-' + m.key);
+    const active = m.key === mes;
+    b.className = 'px-4 py-2 rounded-full font-label text-xs font-semibold transition-colors ' +
+      (active ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface hover:bg-surface-container-highest');
+  });
+  const marcas = ['todas', ...new Set(gastos.filter(g => g.mes === mes).map(g => g.marca))];
+  document.getElementById('marca-tabs-hist').innerHTML = marcas.map(m => (
+    '<button onclick="gastosFiltrarMarcaHist(\'' + m + '\')" id="mhtab-' + m + '" class="px-3 py-1.5 rounded-full font-label text-[11px] font-semibold transition-colors">' + (m === 'todas' ? 'Todas las marcas' : m) + '</button>'
+  )).join('');
+  gastosFiltrarMarcaHist('todas');
+}
+
+function gastosFiltrarMarcaHist(m) {
+  filtroMarcaHist = m;
+  document.querySelectorAll('[id^="mhtab-"]').forEach(b => {
+    const active = b.id === 'mhtab-' + m;
+    b.className = 'px-3 py-1.5 rounded-full font-label text-[11px] font-semibold transition-colors ' +
+      (active ? 'bg-on-surface text-surface' : 'bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest');
+  });
+  renderHistorial();
+}
+
+function renderHistorial() {
+  const list = gastos.filter(g => g.mes === filtroMesHist && (filtroMarcaHist === 'todas' || g.marca === filtroMarcaHist));
+  const totalRegistrado = list.reduce((s,g) => s + g.monto, 0);
+  const totalPagado = list.filter(g => g.pagado).reduce((s,g) => s + g.monto, 0);
+  const totalPendiente = totalRegistrado - totalPagado;
+
+  document.getElementById('hist-total-registrado').textContent = '$' + totalRegistrado.toLocaleString('es-MX');
+  document.getElementById('hist-total-pagado').textContent = '$' + totalPagado.toLocaleString('es-MX');
+  document.getElementById('hist-total-pendiente').textContent = '$' + totalPendiente.toLocaleString('es-MX');
+
+  const porRubro = {};
+  list.forEach(g => { porRubro[g.rubro] = (porRubro[g.rubro] || 0) + g.monto; });
+  document.getElementById('hist-rubros').innerHTML = Object.entries(porRubro).map(([rubro, monto]) => (
+    '<span class="text-xs font-label bg-surface-container-high text-on-surface px-3 py-1.5 rounded-full">' + rubro + ' · $' + monto.toLocaleString('es-MX') + '</span>'
+  )).join('');
+
+  document.getElementById('hist-lista').innerHTML = list.map(g => (
+    '<div class="bg-surface-container-lowest rounded-xl shadow-sm px-5 py-3.5 flex items-center justify-between">' +
+      '<div class="flex-1 min-w-0">' +
+        '<p class="text-sm font-medium text-on-surface">' + g.concepto + '</p>' +
+        '<p class="text-xs text-on-surface-variant">' + g.marca + ' · ' + g.rubro + (g.proveedor ? ' · ' + g.proveedor : '') + '</p>' +
+      '</div>' +
+      '<div class="flex items-center gap-4">' +
+        '<p class="text-sm font-headline font-semibold text-on-surface">$' + g.monto.toLocaleString('es-MX') + '</p>' +
+        (g.pagado
+          ? '<span class="inline-flex items-center gap-1 text-xs font-label font-semibold text-primary"><span class="material-symbols-outlined text-[14px]">check_circle</span>Pagado</span>'
+          : '<span class="inline-flex items-center gap-1 text-xs font-label font-semibold text-error"><span class="material-symbols-outlined text-[14px]">schedule</span>Pendiente</span>'
+        ) +
+      '</div>' +
+    '</div>'
+  )).join('');
+}
+
+showScreen('login');
+</script>
+
+</body>
+</html>
