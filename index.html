@@ -1119,6 +1119,7 @@ tailwind.config = { theme: { extend: {
           <div class="flex gap-2 flex-wrap" role="tablist">
             <button id="cf-tab-banco" role="tab" onclick="cfCambiarVista('banco')" class="flex items-center gap-1.5 px-4 py-2 rounded-xl font-label text-sm font-semibold"><span class="material-symbols-outlined text-[18px]">folder_open</span>Banco de información</button>
             <button id="cf-tab-envios" role="tab" onclick="cfCambiarVista('envios')" class="flex items-center gap-1.5 px-4 py-2 rounded-xl font-label text-sm font-semibold"><span class="material-symbols-outlined text-[18px]">outgoing_mail</span>Envío de facturas<span id="cf-tab-envios-badge" class="hidden min-w-[20px] text-center text-[11px] font-bold rounded-full px-1.5 py-0.5 bg-amber-400 text-black bandeja-slot-listo">0</span></button>
+            <button id="cf-tab-historial" role="tab" onclick="cfCambiarVista('historial')" class="flex items-center gap-1.5 px-4 py-2 rounded-xl font-label text-sm font-semibold"><span class="material-symbols-outlined text-[18px]">history</span>Historial de envíos</button>
           </div>
           <div id="cf-conexion" class="ml-auto"></div>
           </div>
@@ -1142,6 +1143,8 @@ tailwind.config = { theme: { extend: {
             <div id="cfb-lista"></div>
             <p class="text-[11px] text-on-surface-variant mt-4">Aquí vive todo lo que se sabe de cada empresa. Abre una carpeta para ver su expediente; de esta información sale la tabla de "Envío de facturas", que solo muestra lo esencial para mandar los correos.</p>
           </div>
+
+          <div id="cf-vista-historial" class="hidden"><div id="cfh-contenido"></div></div>
 
           <div id="cf-vista-envios" class="hidden">
 
@@ -8872,6 +8875,7 @@ function renderFacturacion() {
   cfConexionAutoVerificar();
   cfRenderBanco();
   cfRenderFacturasSim();
+  if (cfVista === 'historial') cfHistRender();
   const q = cfNormalizar(cfFiltroTexto.trim());
   const conteo = { listo: 0, revision: 0, por_verificar: 0, sin_contacto: 0, sin_rfc: 0, manual: 0, no: 0 };
   clientesEnvioCache.forEach(c => { conteo[cfEstadoEnvio(c)]++; });
@@ -10728,7 +10732,7 @@ function cfConexionAutoVerificar() {
 // mensaje cargado (tú decides si lo envías) y NO se escribe en la base de datos: todo vive en memoria y se pierde al recargar. Se quitará cuando exista la integración real.
 let cfFacturasSim = [];
 let cfSimContador = 0;
-let cfRev = null;            // revisión abierta: { id, adj (copia de trabajo), enviando, paso }
+let cfRev = null;            // revisión abierta: { id, adj (copia de trabajo), enviando, error }
 let cfRevRetardo = 550;      // ms entre pasos del envío simulado
 function cfSimEl(id) { return document.getElementById(id); }
 function cfHora(d) { return d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }); }
@@ -11122,7 +11126,7 @@ function cfAbrirRevision(id) {
   const info = cfSimInfo(fac);
   if (!info) return;
   if (!fac.borrador) fac.borrador = cfSimArmarBorrador(fac, info.c, info);
-  cfRev = { id: id, adj: fac.borrador.adj.slice(), enviando: false, paso: 99, modo: 'sim' };
+  cfRev = { id: id, adj: fac.borrador.adj.slice(), enviando: false, paso: 99, modo: 'sim', error: null };
   cfRenderRev();
   cfSimEl('modal-cf-rev').classList.remove('hidden');
 }
@@ -11174,7 +11178,9 @@ function cfRenderRev() {
     '<span id="cfrev-badge" class="text-[10px] font-label font-bold uppercase tracking-widest rounded-full px-2.5 py-1 ' + (verOnly && fac.enviada.correo && fac.enviada.correo.real ? 'bg-red-100 text-red-700">Correo real' : 'bg-amber-100 text-amber-700">Simulación') + '</span>' + (fac.demo ? '<span class="text-[10px] font-label font-bold uppercase tracking-widest rounded-full px-2.5 py-1 bg-primary-container text-on-primary-container">Escenario: ' + cfEsc(fac.escenario) + '</span>' : '') + '</div>' +
     '<p class="text-sm text-on-surface-variant mt-1"><span class="font-mono font-semibold text-on-surface">' + cfEsc(fac.folio) + '</span> · <strong class="text-on-surface">' + cfSimEtiquetaDestino(fac, info) + '</strong> · ' + cfEsc(cfDinero(fac.total)) + ' (' + fac.metodo + ') · vence el ' + cfEsc(cfFecha(d.nueva.vence)) + '</p></div>' +
     '<button type="button" onclick="cfRevCerrar()" aria-label="Cerrar" class="text-on-surface-variant hover:text-on-surface p-1"><span class="material-symbols-outlined text-[22px]">close</span></button></div>';
-  if (verOnly) { cont.innerHTML = cab + '<div id="cfrev-resultado" class="mt-5"></div>'; cfRevPintarResultado(); return; }
+  const resultado = verOnly || !!cfRev.error;
+  cont.className = 'relative bg-surface-container-lowest rounded-3xl shadow-lg p-6 sm:p-8 w-full my-auto ' + (resultado ? 'max-w-[880px]' : 'max-w-[1640px]');
+  if (resultado) { cont.innerHTML = cfRevResultadoHtml(fac, info); return; }
 
   const av = cfRevAviso(info, fac);
   cfRev.bloqueo = av.bloqueo;
@@ -11523,8 +11529,10 @@ function cfRevEnviar() {
       if (!cfRev || cfRev.id !== fac.id) return;
       if (r.ok) { cfRevTerminarEnvio(fac.id, false, r.real); return; }
       cfRev.enviando = false;
-      cfRevPintarModo();
-      cfRevMsg(r.mensaje + (cfRev.waAbierta ? ' (La pestaña de WhatsApp Web ya se abrió: tú decides si mandas ese mensaje.)' : ''), true);
+      cfRev.error = { mensaje: r.mensaje };
+      const inf = cfSimInfo(fac);
+      if (inf) cfHistRegistrar(fac, inf, 'rechazada', r.mensaje);
+      cfRenderRev();
     });
     return;
   }
@@ -11570,82 +11578,300 @@ function cfRevTerminarEnvio(id, manual, real) {
     correo: !manual && b.correoOn ? { para: cfListaCorreos(b.para), cc: cfListaCorreos(b.cc), asunto: b.asunto, cuerpo: b.cuerpo, id: '<' + hex() + '.' + hex() + '@pestcontrolsolutions.com.mx>', real: real || null } : null,
     wa: !manual && b.waOn ? { para: cfParseLista(b.waPara, true).filter(x => x.length >= 10), texto: b.waTexto, abierta: cfRev ? cfRev.waAbierta : null } : null,
     adj: b.adj.map(a => a.nombre) };
+  const info = cfSimInfo(fac);
+  if (info) cfHistRegistrar(fac, info, manual ? 'a_mano' : (real ? 'enviada' : 'simulada'));
   if (cfRev && cfRev.id === id) {
-    cfRev.enviando = false; cfRev.paso = 0;
+    cfRev.enviando = false; cfRev.error = null;
     cfRenderRev();
-    cfRevSiguientePaso();
   }
   renderFacturacion();
 }
-function cfRevSiguientePaso() {
-  if (!cfRev) return;
-  const fac = cfFacSim(cfRev.id);
-  const total = cfRevPasos(fac, cfSimInfo(fac)).length;
-  if (cfRev.paso < total) {
-    cfRev.paso++;
-    cfRevPintarResultado();
-    setTimeout(cfRevSiguientePaso, cfRevRetardo);
+
+// ---------- Ventana de resultado: veredicto, un bloque por canal y una sola acción ----------
+function cfRevVence(fac, info) {
+  const dias = Number(info.c.dias_credito) || 0;
+  return { dias: dias, fecha: new Date(fac.emision.getTime() + dias * 86400000) };
+}
+function cfRevBloque(o) {
+  // o: { ico, nombre, tono: ok|aviso|mal|nada, estado, detalle, acciones }
+  const T = {
+    ok:    { borde: '#16a34a', ico: 'text-green-600', estado: 'text-on-surface' },
+    aviso: { borde: '#f59e0b', ico: 'text-amber-600', estado: 'text-on-surface' },
+    mal:   { borde: '#ba1a1a', ico: 'text-error', estado: 'text-error' },
+    nada:  { borde: '#9ca3af', ico: 'text-on-surface-variant', estado: 'text-on-surface' },
+  }[o.tono];
+  const marca = { ok: 'check_circle', aviso: 'schedule', mal: 'cancel', nada: 'remove_circle_outline' }[o.tono];
+  return '<div class="rounded-2xl bg-surface-container-low p-4 flex flex-col gap-1.5 min-w-0" style="border-top:4px solid ' + T.borde + '">' +
+    '<div class="flex items-center gap-1.5 text-sm font-label font-semibold text-on-surface-variant"><span class="material-symbols-outlined text-[18px]">' + o.ico + '</span>' + o.nombre +
+    '<span class="material-symbols-outlined text-[20px] ml-auto ' + T.ico + '">' + marca + '</span></div>' +
+    '<div class="font-headline text-xl font-semibold ' + T.estado + '">' + o.estado + '</div>' +
+    '<div class="text-xs text-on-surface-variant break-words">' + o.detalle + '</div>' +
+    (o.acciones ? '<div class="flex flex-wrap gap-2 mt-1.5">' + o.acciones + '</div>' : '') + '</div>';
+}
+function cfRevResultadoHtml(fac, info) {
+  const err = cfRev.error;
+  const e = fac.enviada;
+  const lista = a => a.map(cfEsc).join(', ');
+  const real = !!(e && e.correo && e.correo.real);
+  const v = cfRevVence(fac, info);
+  const pendientes = cfCasosPendientes().length;
+  // Veredicto
+  let ico, tono, titulo, chip, sub;
+  if (err) { ico = 'error'; tono = 'bg-error-container text-error'; titulo = 'No se envió'; chip = ''; sub = 'La factura sigue pendiente. Corrige lo que indica el bloque en rojo y reintenta.'; }
+  else if (e.manual) { ico = 'front_hand'; tono = 'bg-green-100 text-green-700'; titulo = 'Entregada a mano'; chip = ''; sub = 'Quedó registrada. Core no mandó nada.'; }
+  else if (e.correo && real) { ico = 'check_circle'; tono = 'bg-green-100 text-green-700'; titulo = 'Enviada'; chip = '<span class="text-[10px] font-label font-bold uppercase tracking-widest rounded-full px-2.5 py-1 bg-red-100 text-red-700">Correo real</span>'; sub = 'El correo salió de verdad por Hostinger.'; }
+  else if (e.correo) { ico = 'science'; tono = 'bg-amber-100 text-amber-700'; titulo = 'Simulada'; chip = '<span class="text-[10px] font-label font-bold uppercase tracking-widest rounded-full px-2.5 py-1 bg-amber-100 text-amber-700">Simulación</span>'; sub = 'Prueba: no salió ningún correo de verdad.'; }
+  else { ico = 'chat'; tono = 'bg-amber-100 text-amber-700'; titulo = 'WhatsApp preparado'; chip = '<span class="text-[10px] font-label font-bold uppercase tracking-widest rounded-full px-2.5 py-1 bg-amber-100 text-amber-700">Simulación</span>'; sub = 'Falta que presiones enviar en WhatsApp Web.'; }
+  const cab = '<div class="flex items-start gap-4"><span class="shrink-0 w-14 h-14 rounded-2xl flex items-center justify-center ' + tono + '"><span class="material-symbols-outlined text-[32px]">' + ico + '</span></span>' +
+    '<div class="min-w-0 flex-1"><div class="flex items-center gap-2 flex-wrap"><h3 class="font-headline text-3xl font-semibold text-on-surface leading-tight">' + titulo + '</h3>' + chip +
+    (fac.demo ? '<span class="text-[10px] font-label font-bold uppercase tracking-widest rounded-full px-2.5 py-1 bg-primary-container text-on-primary-container">Escenario</span>' : '') + '</div>' +
+    '<p class="text-sm text-on-surface-variant mt-0.5">' + sub + '</p>' +
+    '<p class="text-sm mt-1"><span class="font-mono font-semibold">' + cfEsc(fac.folio) + '</span> · <strong>' + cfSimEtiquetaDestino(fac, info) + '</strong> · ' + cfEsc(cfDinero(fac.total)) + ' (' + fac.metodo + ') · vence ' + cfEsc(cfFecha(v.fecha)) + '</p></div>' +
+    '<button type="button" onclick="cfRevCerrar()" aria-label="Cerrar" class="text-on-surface-variant hover:text-on-surface p-1"><span class="material-symbols-outlined text-[22px]">close</span></button></div>';
+  // Bloques
+  const b = fac.borrador || {};
+  const adjN = err ? (cfRev.adj || []).length : e.adj.length;
+  let correo, wa;
+  if (err) {
+    correo = cfRevBloque({ ico: 'mail', nombre: 'Correo', tono: 'mal', estado: 'Rechazado', detalle: cfEsc(err.mensaje) });
+    wa = b.waOn ? cfRevBloque({ ico: 'chat', nombre: 'WhatsApp', tono: 'aviso', estado: cfRev.waAbierta ? 'Abierto, no enviado' : 'No se abrió', detalle: cfRev.waAbierta ? 'WhatsApp Web ya se abrió: tú decides si mandas ese mensaje.' : 'Aún no se preparó el mensaje.' })
+      : cfRevBloque({ ico: 'chat', nombre: 'WhatsApp', tono: 'nada', estado: 'No aplica', detalle: 'Este envío no lo usa.' });
+  } else {
+    if (e.correo && real) correo = cfRevBloque({ ico: 'mail', nombre: 'Correo', tono: 'ok', estado: 'Enviado', detalle: 'A ' + lista(e.correo.real.destinatarios) + ' · ' + cfPlural(e.correo.real.adjuntos, 'adjunto', 'adjuntos') });
+    else if (e.correo) correo = cfRevBloque({ ico: 'mail', nombre: 'Correo', tono: 'aviso', estado: 'Simulado', detalle: 'A ' + lista(e.correo.para) + ' · no salió nada' });
+    else correo = cfRevBloque({ ico: 'mail', nombre: 'Correo', tono: 'nada', estado: 'No aplica', detalle: e.manual ? 'Entrega a mano: Core no manda correo.' : 'Este envío no lo usa.' });
+    if (e.wa) {
+      const abrir = e.wa.para.map(n => '<button type="button" onclick="cfRevAbrirWa(\'' + cfEsc(n) + '\')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#128c7e] text-white text-xs font-label font-semibold hover:bg-[#0e6f64]"><span class="material-symbols-outlined text-[15px]">open_in_new</span>Abrir WhatsApp' + (e.wa.para.length > 1 ? ' ' + cfEsc(cfWaNumero(n)) : '') + '</button>').join('');
+      const arch = (cfRev.adj || []).length ? '<button type="button" onclick="cfRevDescargarTodos()" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-surface-container-high text-on-surface text-xs font-label font-semibold hover:bg-surface-container-highest"><span class="material-symbols-outlined text-[15px]">download</span>Archivos</button>' : '';
+      wa = cfRevBloque({ ico: 'chat', nombre: 'WhatsApp', tono: 'aviso', estado: 'Te toca a ti', detalle: (e.wa.abierta === false ? 'El navegador bloqueó la pestaña: ' : 'Preparado para ' + lista(e.wa.para.map(cfWaNumero)) + ': ') + 'ábrelo, arrastra los archivos y presiona enviar.', acciones: abrir + arch });
+    } else wa = cfRevBloque({ ico: 'chat', nombre: 'WhatsApp', tono: 'nada', estado: 'No aplica', detalle: e.manual ? 'Entrega a mano.' : 'Este envío no lo usa.' });
   }
+  const cobranza = cfRevBloque({ ico: 'account_balance_wallet', nombre: 'Cobranza', tono: 'nada', estado: err ? 'Sin registrar' : 'En prueba',
+    detalle: err ? 'Nada se anotó.' : (fac.metodo === 'PPD' ? 'PPD: al pagar, habrá que emitir el REP. ' : 'PUE: sin REP. ') + 'En esta prueba no se guardó en Cuentas por cobrar.' });
+  // Pie: una acción principal
+  const sec = (txt, ico, fn) => '<button type="button" onclick="' + fn + '" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-surface-container-high text-on-surface font-label text-sm font-semibold hover:bg-surface-container-highest"><span class="material-symbols-outlined text-[18px]">' + ico + '</span>' + txt + '</button>';
+  const prim = (txt, ico, fn) => '<button type="button" onclick="' + fn + '" class="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-primary text-on-primary font-label text-sm font-semibold hover:bg-primary-container hover:text-on-primary-container">' + txt + '<span class="material-symbols-outlined text-[18px]">' + ico + '</span></button>';
+  const pie = '<div class="mt-5 pt-4 border-t border-outline-variant/30 flex items-center gap-2 flex-wrap">' +
+    (!err && e.correo ? sec('Ver correo enviado', 'visibility', 'cfRevVerEnviado()') : '') +
+    sec('Ver en Historial', 'history', 'cfRevIrHistorial()') +
+    '<span class="flex-1"></span>' +
+    (err ? prim('Corregir y reintentar', 'edit', 'cfRevReintentar()')
+      : (pendientes ? prim('Siguiente caso <span class="opacity-80 font-normal">(' + pendientes + ' por revisar)</span>', 'arrow_forward', 'cfRevSiguienteCaso()') : prim('Listo', 'check', 'cfRevCerrar()'))) + '</div>';
+  const enviado = !err && e.correo ? '<div id="cfrev-enviado" class="hidden mt-4">' + cfHistCorreoHtml({ de: CF_REMITENTE_EJEMPLO.correo, para: e.correo.para, cc: e.correo.cc, asunto: e.correo.asunto, adjuntos: e.adj, cuerpo: e.correo.cuerpo }) + '</div>' : '';
+  return cab + '<div class="grid gap-3 sm:grid-cols-3 mt-5">' + correo + wa + cobranza + '</div><p id="cfrev-msg" role="status" class="text-xs mt-3 min-h-[1rem]"></p>' + enviado + pie;
+}
+function cfRevVerEnviado() { const el = cfSimEl('cfrev-enviado'); if (el) el.classList.toggle('hidden'); }
+function cfRevDescargarTodos() { (cfRev ? cfRev.adj : []).forEach((a, i) => setTimeout(() => cfRevDescargar(i), i * 350)); }
+function cfRevReintentar() { if (!cfRev) return; cfRev.error = null; cfRenderRev(); }
+function cfRevIrHistorial() {
+  const id = cfRev && cfRev.id;
+  const item = cfHist.items.find(h => h.facId === id);
+  cfRevCerrar();
+  cfHist.sel = item ? item.id : null;
+  cfCambiarVista('historial');
+}
+// "Siguiente caso": cierra el resultado y deja abierto en la cola el caso que sigue.
+function cfRevSiguienteCaso() {
+  cfRevCerrar();
+  cfVista = 'envios';
+  cfAplicarVista();
+  const el = cfSimEl('cf-facturas-sim');
+  if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-// El resultado paso a paso: lo que hace Core después de tu "Enviar".
-function cfRevPasos(fac, info) {
-  const e = fac.enviada;
-  const c = info.c;
-  const dias = Number(c.dias_credito) || 0;
-  const vence = new Date(fac.emision.getTime() + dias * 86400000);
-  const lista = a => a.map(cfEsc).join(', ');
-  const pasos = [];
-  if (e.manual) {
-    pasos.push({ ico: 'front_hand', tono: 'ok', t: 'Entrega a mano registrada', d: 'Marcaste esta factura como entregada por el canal «' + cfEsc(CF_CANALES[c.canal_envio] || c.canal_envio) + '». Core no mandó nada.' });
+// ============================================================================================
+// HISTORIAL DE ENVÍOS — todo lo que Core envió, simuló, entregó a mano o le rechazaron, con lo que se mandó tal cual
+// ============================================================================================
+// Se guarda en la tabla envios_historial (solo administradores; se puede leer e insertar, nunca editar ni borrar).
+// Si la tabla aún no existe, Core lo avisa y los envíos se ven solo mientras no recargues la página.
+const CF_HIST_TABLA = 'envios_historial';
+const CF_HIST_RES = {
+  enviada:   { txt: 'Enviada', chip: 'bg-green-100 text-green-800', filtro: 'Enviadas' },
+  rechazada: { txt: 'Rechazada', chip: 'bg-error-container text-on-error-container', filtro: 'Rechazadas' },
+  simulada:  { txt: 'Simulada', chip: 'bg-surface-container-high text-on-surface-variant', filtro: 'Simuladas' },
+  a_mano:    { txt: 'Entregada a mano', chip: 'bg-green-100 text-green-800', filtro: 'A mano' },
+};
+const CF_HIST_RES_ORDEN = ['enviada', 'rechazada', 'simulada', 'a_mano'];
+let cfHist = { items: [], cargando: false, cargado: false, tabla: 'desconocida', aviso: '', texto: '', empresa: 'todas', mes: 'todos', filtro: 'todos', sel: null };
+
+function cfHistItemDeFila(r) {
+  return { id: 'db-' + r.id, dbId: r.id, facId: null, cuando: new Date(r.creado_en), usuario: r.usuario_email || '', folio: r.folio || '', cliente: r.cliente || '', sede: r.sede || '', rfc: r.rfc || '',
+    total: Number(r.total) || 0, metodo: r.metodo || '', modo: r.modo || '', resultado: r.resultado, correo: r.correo || null, wa: r.wa || null, adjuntos: r.adjuntos || [],
+    bitacora: (r.bitacora || []).map(x => ({ h: new Date(x.h), t: x.t })), error: r.error || '', escenario: r.escenario || '', guardado: true };
+}
+function cfHistFilaDeItem(h) {
+  return { folio: h.folio, cliente: h.cliente, sede: h.sede || null, rfc: h.rfc || null, total: h.total, metodo: h.metodo || null, modo: h.modo, resultado: h.resultado,
+    correo: h.correo, wa: h.wa, adjuntos: h.adjuntos, bitacora: h.bitacora.map(x => ({ h: x.h.toISOString(), t: x.t })), error: h.error || null, escenario: h.escenario || null, usuario_email: h.usuario || null };
+}
+function cfHistTablaFalta(err) {
+  const m = String((err && (err.message || '')) + ' ' + (err && err.code || '')).toLowerCase();
+  return /42p01|pgrst205|does not exist|could not find the table|schema cache/.test(m);
+}
+async function cfHistRegistrar(fac, info, resultado, errorMsg) {
+  const e = fac.enviada, b = fac.borrador || {};
+  const ahora = new Date();
+  const real = !!(e && e.correo && e.correo.real);
+  const modo = resultado === 'a_mano' ? 'a_mano' : (real || resultado === 'rechazada' && cfRev && cfRev.modo === 'real' ? 'real' : 'simulado');
+  const bit = [];
+  const ln = (t) => bit.push({ h: new Date(), t: t });
+  const adjNombres = resultado === 'rechazada' ? (cfRev && cfRev.adj ? cfRev.adj.map(a => a.nombre) : []) : (e ? e.adj : []);
+  let correo = null, wa = null;
+  if (resultado === 'rechazada') {
+    ln('Intentaste enviar la factura');
+    const para = cfListaCorreos(b.para);
+    correo = { de: CF_REMITENTE_EJEMPLO.correo, para: para, cc: cfListaCorreos(b.cc), asunto: b.asunto || '', cuerpo: b.cuerpo || '', estado: 'rechazado', error: errorMsg || '' };
+    ln('Correo rechazado: ' + (errorMsg || 'sin detalle'));
+    if (b.waOn) { wa = { para: cfParseLista(b.waPara, true).filter(x => x.length >= 10), texto: b.waTexto || '', abierta: cfRev ? cfRev.waAbierta : null }; if (wa.abierta) ln('WhatsApp Web se abrió con el mensaje; no se sabe si lo mandaste'); }
+  } else if (resultado === 'a_mano') {
+    ln('Marcaste la factura como entregada a mano (' + (CF_CANALES[info.c.canal_envio] || info.c.canal_envio) + ')');
   } else {
-    pasos.push({ ico: 'task_alt', tono: 'ok', t: 'Core recibe tu aprobación', d: 'Arma el envío con tus ediciones: ' + (e.correo ? 'correo' : '') + (e.correo && e.wa ? ' y ' : '') + (e.wa ? 'WhatsApp' : '') + (e.adj.length ? ' · adjuntos: ' + lista(e.adj) : ' · sin adjuntos') + '.' });
-    if (e.correo && e.correo.real) {
-      const rl = e.correo.real;
-      pasos.push({ ico: 'mark_email_read', tono: 'ok', t: 'Hostinger: correo ENVIADO de verdad',
-        d: 'De <span class="font-mono">' + cfEsc(rl.remitente) + '</span> a <strong>' + lista(rl.destinatarios) + '</strong>. Asunto: «' + cfEsc(e.correo.asunto) + '». Adjuntos enviados: ' + rl.adjuntos + '.' +
-          (rl.omitidos && rl.omitidos.length ? '<div class="text-xs mt-1">No se adjuntó (documento de ejemplo, no es un archivo real): ' + lista(rl.omitidos) + '.</div>' : '') +
-          '<div class="text-xs mt-1">Modo ' + (rl.modo === 'real' ? '<strong>real</strong>' : 'prueba') + ' · Hostinger aceptó el correo y quedó anotado en la bitácora de envíos (envios_correo_log).</div>' });
-    } else if (e.correo) pasos.push({ ico: 'mail', tono: 'ok', t: 'Hostinger: correo entregado al servidor',
-      d: 'De <span class="font-mono">' + cfEsc(CF_REMITENTE_EJEMPLO.correo) + '</span> a <strong>' + lista(e.correo.para) + '</strong>' + (e.correo.cc.length ? ' (CC ' + lista(e.correo.cc) + ')' : '') + '. Asunto: «' + cfEsc(e.correo.asunto) + '».<div class="text-xs mt-1">Respuesta simulada: 250 aceptado · <span class="font-mono break-all">' + cfEsc(e.correo.id) + '</span></div>' });
-    if (e.wa) pasos.push({ ico: 'chat', tono: e.wa.abierta === false ? 'info' : 'ok', t: 'WhatsApp Web: mensaje preparado',
-      d: (e.wa.abierta === false ? 'El navegador bloqueó la pestaña emergente (permítela para este sitio). Usa los botones para abrirla. ' : 'Se abrió WhatsApp Web con el mensaje cargado para <strong>' + lista(e.wa.para.map(cfWaNumero)) + '</strong>. ') +
-        'Core no sabe si ya lo mandaste: revisa el mensaje y presiona enviar en WhatsApp Web. Los archivos se arrastran al chat.' +
-        '<div class="flex flex-wrap gap-2 mt-2">' + e.wa.para.map(n => '<button type="button" onclick="cfRevAbrirWa(\'' + cfEsc(n) + '\')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#128c7e] text-white text-xs font-label font-semibold hover:bg-[#0e6f64]"><span class="material-symbols-outlined text-[15px]">open_in_new</span>Abrir ' + cfEsc(cfWaNumero(n)) + '</button>').join('') +
-        cfRev.adj.map((a, i) => '<button type="button" onclick="cfRevDescargar(' + i + ')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-surface-container-high text-on-surface text-xs font-label font-semibold hover:bg-surface-container-highest"><span class="material-symbols-outlined text-[15px]">download</span>' + cfEsc(a.nombre) + '</button>').join('') + '</div>' });
+    ln(real ? 'Aprobaste el envío' : 'Aprobaste el envío (simulación)');
+    if (e.correo) {
+      correo = { de: CF_REMITENTE_EJEMPLO.correo, para: e.correo.para, cc: e.correo.cc, asunto: e.correo.asunto, cuerpo: e.correo.cuerpo, estado: real ? 'enviado' : 'simulado', id: e.correo.id };
+      if (real) { correo.destinatarios = e.correo.real.destinatarios; correo.modo = e.correo.real.modo; correo.adjuntosEnviados = e.correo.real.adjuntos; ln('Correo: Hostinger lo aceptó (modo ' + (e.correo.real.modo === 'real' ? 'real' : 'prueba') + ')'); }
+      else ln('Correo simulado: no salió nada de verdad');
+    }
+    if (e.wa) { wa = { para: e.wa.para, texto: e.wa.texto, abierta: e.wa.abierta }; ln(e.wa.abierta === false ? 'WhatsApp: el navegador bloqueó la pestaña' : 'WhatsApp preparado en WhatsApp Web (lo manda la persona)'); }
   }
-  const fila = '<tr class="border-t border-outline-variant/30"><td class="px-3 py-2 font-mono">' + cfEsc(fac.folio) + '</td><td class="px-3 py-2">' + cfSimEtiquetaDestino(fac, info) + '</td>' +
-    '<td class="px-3 py-2 whitespace-nowrap">' + cfEsc(cfFecha(fac.emision)) + '</td><td class="px-3 py-2 whitespace-nowrap">' + cfEsc(cfFecha(vence)) + ' <span class="text-xs text-on-surface-variant">(' + dias + ' d)</span></td>' +
-    '<td class="px-3 py-2 text-right font-semibold whitespace-nowrap">' + cfEsc(cfDinero(fac.total)) + '</td><td class="px-3 py-2"><span class="rounded-full px-2.5 py-0.5 text-xs font-label font-semibold bg-amber-100 text-amber-700">Por vencer</span></td></tr>';
-  pasos.push({ ico: 'account_balance_wallet', tono: 'info', t: 'Cuentas por cobrar',
-    d: 'La factura entra como cuenta por cobrar de este cliente' + (fac.sede ? ' y de esa sede' : '') + ' y suma a su saldo.' +
-      '<div class="overflow-x-auto mt-2 rounded-xl ring-1 ring-outline-variant/30"><table class="w-full text-sm"><thead class="bg-surface-container-low text-xs text-on-surface-variant"><tr><th class="px-3 py-2 text-left">Folio</th><th class="px-3 py-2 text-left">Cliente</th><th class="px-3 py-2 text-left">Emisión</th><th class="px-3 py-2 text-left">Vence</th><th class="px-3 py-2 text-right">Importe</th><th class="px-3 py-2 text-left">Estado</th></tr></thead><tbody>' + fila + '</tbody></table></div>' +
-      '<div class="text-xs mt-2">' + (fac.metodo === 'PPD' ? 'Es PPD: cuando el cliente pague se concilia el pago contra este folio y hay que emitir el REP por lo que realmente pagó.' : 'Es PUE: se espera el pago en una sola exhibición y no requiere REP.') + ' En esta prueba no se guardó en Cuentas por cobrar.</div>' });
-  pasos.push({ ico: 'history', tono: 'ok', t: 'Queda en el historial',
-    d: 'Se anota: factura ' + cfEsc(fac.folio) + ' recibida de factura.com, revisada por ti y ' + (e.manual ? 'entregada a mano' : (e.correo ? 'enviada por correo' : '') + (e.correo && e.wa ? ' y ' : '') + (e.wa ? (e.correo ? 'WhatsApp preparado en WhatsApp Web' : 'WhatsApp preparado en WhatsApp Web') : '')) + ' (' + cfEsc(cfFecha(e.cuando)) + ', ' + cfHora(e.cuando) + ').' });
-  return pasos;
+  const item = { id: 'loc-' + Date.now() + '-' + Math.random().toString(16).slice(2, 6), dbId: null, facId: fac.id, cuando: ahora, usuario: '', folio: fac.folio, cliente: info.c.nombre_comercial || '', sede: fac.sede ? cfCortarNombreSede(fac.sede, [info.e.razon, info.e.nombre]) : '',
+    rfc: fac.rfc || '', total: fac.total, metodo: fac.metodo, modo: modo, resultado: resultado, correo: correo, wa: wa, adjuntos: adjNombres, bitacora: bit, error: errorMsg || '', escenario: fac.demo ? (fac.escenario || '') : '', guardado: false };
+  cfHist.items.unshift(item);
+  try { const { data } = await sb.auth.getSession(); item.usuario = (data && data.session && data.session.user.email) || ''; } catch (_) {}
+  if (cfVista === 'historial') cfHistRender();
+  try {
+    const r = await sb.from(CF_HIST_TABLA).insert(cfHistFilaDeItem(item)).select('id').single();
+    if (r.error) throw r.error;
+    item.dbId = r.data.id; item.guardado = true; cfHist.tabla = 'ok';
+  } catch (err) {
+    cfHist.tabla = cfHistTablaFalta(err) ? 'falta' : 'error';
+    cfHist.aviso = cfHist.tabla === 'falta' ? 'Falta crear la tabla del historial. Mientras tanto, los envíos se ven aquí solo hasta que recargues la página.' : 'No se pudo guardar este envío en el historial (' + (err && err.message ? err.message : 'error') + ').';
+  }
+  if (cfVista === 'historial') cfHistRender();
 }
-function cfRevPintarResultado() {
-  const cont = cfSimEl('cfrev-resultado');
-  if (!cont || !cfRev) return;
-  const fac = cfFacSim(cfRev.id);
-  const info = cfSimInfo(fac);
-  const tonos = { ok: 'bg-tertiary-container text-on-tertiary-container', info: 'bg-primary-container text-on-primary-container' };
-  const pasos = cfRevPasos(fac, info);
-  const visibles = pasos.slice(0, cfRev.paso);
-  const e = fac.enviada;
-  const enviado = e.correo
-    ? '<details class="mt-4 rounded-xl bg-surface-container-low px-4 py-3"><summary class="cursor-pointer text-sm font-semibold text-on-surface">Ver el correo tal como se envió</summary><div class="mt-3 rounded-2xl border border-outline-variant/40 overflow-hidden" style="background:#fff;color:#1b1b1f">' +
-      '<div style="background:#f4f4f7;padding:12px 16px;font-size:13px;line-height:1.7"><div><span style="color:#6b6b73">Para:</span> ' + e.correo.para.map(cfEsc).join(', ') + '</div><div><span style="color:#6b6b73">CC:</span> ' + (e.correo.cc.map(cfEsc).join(', ') || '—') + '</div><div><span style="color:#6b6b73">Asunto:</span> <strong>' + cfEsc(e.correo.asunto) + '</strong></div><div><span style="color:#6b6b73">Adjuntos:</span> ' + (e.adj.map(cfEsc).join(', ') || '—') + '</div></div>' +
-      '<div style="padding:18px 20px;font-size:14px;line-height:1.6;font-family:Arial,Helvetica,sans-serif">' + e.correo.cuerpo + '</div></div></details>' : '';
-  cont.innerHTML = '<ol class="list-none">' + visibles.map(p => '<li class="flex gap-3"><span class="shrink-0 w-9 h-9 rounded-full flex items-center justify-center ' + tonos[p.tono] + '"><span class="material-symbols-outlined text-[20px]">' + p.ico + '</span></span>' +
-    '<div class="min-w-0 flex-1 pb-5"><div class="text-sm font-semibold text-on-surface">' + p.t + '</div><div class="text-sm text-on-surface-variant mt-1">' + p.d + '</div></div></li>').join('') + '</ol>' +
-    (visibles.length < pasos.length ? '<p class="text-sm text-on-surface-variant flex items-center gap-2"><span class="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>Core está trabajando…</p>'
-      : (e.correo && e.correo.real
-        ? '<div class="rounded-xl bg-red-100 text-red-700 text-xs px-3 py-2 flex items-center gap-2"><span class="material-symbols-outlined text-[16px]">mark_email_read</span>El correo salió de verdad por Hostinger. No se emitió nada en factura.com, el WhatsApp no se mandó solo y la factura no se guardó en la base de datos (sigue siendo una prueba).</div>'
-        : '<div class="rounded-xl bg-amber-100 text-amber-700 text-xs px-3 py-2 flex items-center gap-2"><span class="material-symbols-outlined text-[16px]">science</span>Simulación: no salió ningún correo ni WhatsApp, no se emitió nada en factura.com y no se guardó nada en la base de datos.</div>') + enviado +
-        '<div class="flex justify-end mt-4"><button type="button" onclick="cfRevCerrar()" class="px-4 py-2.5 rounded-xl bg-primary text-on-primary font-label text-sm font-semibold hover:bg-primary-container hover:text-on-primary-container">Listo</button></div>');
+async function cfHistCargar() {
+  if (cfHist.cargando) return;
+  cfHist.cargando = true; cfHistRender();
+  try {
+    const r = await sb.from(CF_HIST_TABLA).select('*').order('creado_en', { ascending: false }).limit(500);
+    if (r.error) throw r.error;
+    const locales = cfHist.items.filter(h => !h.guardado);
+    cfHist.items = locales.concat((r.data || []).map(cfHistItemDeFila));
+    cfHist.tabla = 'ok'; cfHist.aviso = ''; cfHist.cargado = true;
+  } catch (err) {
+    cfHist.tabla = cfHistTablaFalta(err) ? 'falta' : 'error';
+    cfHist.aviso = cfHist.tabla === 'falta' ? 'Falta crear la tabla del historial (archivo envios_historial.sql). Mientras tanto, los envíos se ven aquí solo hasta que recargues la página.' : 'No se pudo leer el historial: ' + (err && err.message ? err.message : 'error') + '.';
+  }
+  cfHist.cargando = false; cfHistRender();
 }
+function cfHistMes(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
+function cfHistMesTxt(m) { const p = m.split('-'); return new Date(Number(p[0]), Number(p[1]) - 1, 1).toLocaleDateString('es-MX', { month: 'long', year: 'numeric' }); }
+function cfHistFiltrarTexto(v) { cfHist.texto = v || ''; cfHistRender(); }
+function cfHistSetEmpresa(v) { cfHist.empresa = v; cfHistRender(); }
+function cfHistSetMes(v) { cfHist.mes = v; cfHistRender(); }
+function cfHistSetFiltro(v) { cfHist.filtro = v; cfHistRender(); }
+function cfHistSeleccionar(id) { cfHist.sel = cfHist.sel === id ? null : id; cfHistRender(); }
+
+// El correo tal como salió (mismo bloque que se ve en la ventana de resultado y en el detalle del historial).
+function cfHistCorreoHtml(c) {
+  return '<div class="rounded-2xl border border-outline-variant/40 overflow-hidden" style="background:#fff;color:#1b1b1f">' +
+    '<div style="background:#f4f4f7;padding:12px 16px;font-size:13px;line-height:1.7"><div><span style="color:#6b6b73">De:</span> ' + cfEsc(c.de || CF_REMITENTE_EJEMPLO.correo) + '</div><div><span style="color:#6b6b73">Para:</span> ' + ((c.para || []).map(cfEsc).join(', ') || '—') + '</div>' +
+    ((c.cc || []).length ? '<div><span style="color:#6b6b73">CC:</span> ' + c.cc.map(cfEsc).join(', ') + '</div>' : '') +
+    '<div><span style="color:#6b6b73">Asunto:</span> <strong>' + cfEsc(c.asunto) + '</strong></div><div><span style="color:#6b6b73">Adjuntos:</span> ' + ((c.adjuntos || []).map(cfEsc).join(', ') || '—') + '</div></div>' +
+    '<div style="padding:18px 20px;font-size:14px;line-height:1.6;font-family:Arial,Helvetica,sans-serif;overflow-x:auto">' + (c.cuerpo || '') + '</div></div>';
+}
+function cfHistDescargar(id) {
+  const h = cfHist.items.find(x => x.id === id);
+  if (!h || !h.correo) return;
+  const c = h.correo;
+  const doc = '<!doctype html><meta charset="utf-8"><title>' + cfEsc(c.asunto) + '</title><body style="font-family:Arial,Helvetica,sans-serif;max-width:760px;margin:24px auto;color:#1b1b1f">' +
+    '<table style="font-size:13px;line-height:1.7;margin-bottom:16px"><tr><td style="color:#6b6b73;padding-right:12px">De</td><td>' + cfEsc(c.de) + '</td></tr><tr><td style="color:#6b6b73">Para</td><td>' + (c.para || []).map(cfEsc).join(', ') + '</td></tr>' +
+    ((c.cc || []).length ? '<tr><td style="color:#6b6b73">CC</td><td>' + c.cc.map(cfEsc).join(', ') + '</td></tr>' : '') +
+    '<tr><td style="color:#6b6b73">Asunto</td><td><strong>' + cfEsc(c.asunto) + '</strong></td></tr><tr><td style="color:#6b6b73">Adjuntos</td><td>' + ((h.adjuntos || []).map(cfEsc).join(', ') || '—') + '</td></tr>' +
+    '<tr><td style="color:#6b6b73">Fecha</td><td>' + cfEsc(cfFecha(h.cuando) + ' ' + cfHora(h.cuando)) + '</td></tr></table><hr>' + (c.cuerpo || '') + '</body>';
+  const url = URL.createObjectURL(new Blob([doc], { type: 'text/html' }));
+  const a = document.createElement('a'); a.href = url; a.download = 'correo-' + (h.folio || 'envio') + '.html'; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+function cfHistCanales(h) {
+  const pill = (ico, txt, cls) => '<span class="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-label font-semibold ' + cls + '"><span class="material-symbols-outlined text-[14px]">' + ico + '</span>' + txt + '</span>';
+  const out = [];
+  if (h.resultado === 'a_mano') out.push(pill('front_hand', 'A mano', 'bg-primary-container text-on-primary-container'));
+  if (h.correo) {
+    const k = h.correo.estado;
+    out.push(k === 'enviado' ? pill('mail', 'Correo ✓', 'bg-green-100 text-green-800') : k === 'rechazado' ? pill('mail', 'Correo ✕', 'bg-error-container text-on-error-container') : pill('mail', 'Correo (sim.)', 'bg-surface-container-high text-on-surface-variant'));
+  }
+  if (h.wa) out.push(pill('chat', h.resultado === 'simulada' || h.modo === 'simulado' ? 'WhatsApp (sim.)' : 'WhatsApp por mandar', h.resultado === 'simulada' || h.modo === 'simulado' ? 'bg-surface-container-high text-on-surface-variant' : 'bg-amber-100 text-amber-800'));
+  return out.join(' ');
+}
+function cfHistDetalle(h) {
+  const R = CF_HIST_RES[h.resultado] || CF_HIST_RES.simulada;
+  const modoTxt = h.modo === 'real' ? 'Real' : (h.modo === 'a_mano' ? 'A mano' : 'Simulado');
+  const bloques = [];
+  if (h.correo) {
+    bloques.push('<div class="text-[10px] font-label uppercase tracking-widest text-on-surface-variant font-bold mt-4 mb-1.5">Correo' + (h.correo.estado === 'rechazado' ? ' (no salió)' : (h.correo.estado === 'simulado' ? ' (simulado)' : '')) + '</div>' +
+      cfHistCorreoHtml({ de: h.correo.de, para: h.correo.para, cc: h.correo.cc, asunto: h.correo.asunto, adjuntos: h.adjuntos, cuerpo: h.correo.cuerpo }));
+  }
+  if (h.wa) {
+    bloques.push('<div class="text-[10px] font-label uppercase tracking-widest text-on-surface-variant font-bold mt-4 mb-1.5">WhatsApp · ' + ((h.wa.para || []).map(n => cfEsc(cfWaNumero(n))).join(', ') || '—') + '</div>' +
+      '<div class="rounded-2xl bg-surface-container-low px-4 py-3 text-sm whitespace-pre-wrap break-words">' + cfEsc(h.wa.texto) + '</div>');
+  }
+  const bit = '<div class="text-[10px] font-label uppercase tracking-widest text-on-surface-variant font-bold mt-4 mb-1.5">Bitácora</div><ul class="list-none flex flex-col gap-1">' +
+    h.bitacora.map(x => '<li class="text-xs"><span class="font-mono text-on-surface-variant">' + cfEsc(cfHora(x.h)) + '</span> · ' + cfEsc(x.t) + '</li>').join('') + '</ul>';
+  return '<div class="flex items-start justify-between gap-3"><div class="min-w-0"><div class="font-mono text-lg font-bold">' + cfEsc(h.folio) + '</div><div class="text-sm text-on-surface-variant">' + cfEsc(h.cliente) + (h.sede ? ' · ' + cfEsc(h.sede) : '') + ' · ' + cfEsc(cfDinero(h.total)) + '</div></div>' +
+    '<div class="flex items-center gap-2"><span class="rounded-full px-3 py-1 text-[11px] font-label font-bold uppercase ' + R.chip + '">' + R.txt + '</span><button type="button" onclick="cfHistSeleccionar(\'' + h.id + '\')" aria-label="Cerrar detalle" class="text-on-surface-variant hover:text-on-surface p-1"><span class="material-symbols-outlined text-[20px]">close</span></button></div></div>' +
+    '<div class="text-xs text-on-surface-variant mt-1">' + cfEsc(cfFecha(h.cuando)) + ' · ' + cfEsc(cfHora(h.cuando)) + ' · ' + modoTxt + (h.usuario ? ' · ' + cfEsc(h.usuario) : '') + (h.rfc ? ' · ' + cfEsc(h.rfc) : '') + (h.escenario ? ' · Escenario: ' + cfEsc(h.escenario) : '') + '</div>' +
+    (h.error ? '<div class="mt-3 rounded-xl bg-error-container text-on-error-container text-sm px-3 py-2">' + cfEsc(h.error) + '</div>' : '') +
+    bloques.join('') + bit +
+    (h.correo ? '<div class="mt-4"><button type="button" onclick="cfHistDescargar(\'' + h.id + '\')" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-surface-container-high text-on-surface font-label text-sm font-semibold hover:bg-surface-container-highest"><span class="material-symbols-outlined text-[18px]">download</span>Descargar correo</button></div>' : '');
+}
+function cfHistRender() {
+  const cont = cfSimEl('cfh-contenido');
+  if (!cont) return;
+  const act = document.activeElement;
+  const refoco = !!(act && act.id === 'cfh-buscar');
+  const pos = refoco ? act.selectionStart : 0;
+  const items = cfHist.items;
+  const empresas = Array.from(new Set(items.map(h => h.cliente).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'es'));
+  const meses = Array.from(new Set(items.map(h => cfHistMes(h.cuando)))).sort().reverse();
+  if (cfHist.empresa !== 'todas' && empresas.indexOf(cfHist.empresa) === -1) cfHist.empresa = 'todas';
+  if (cfHist.mes !== 'todos' && meses.indexOf(cfHist.mes) === -1) cfHist.mes = 'todos';
+  const q = cfNormalizar(cfHist.texto.trim());
+  const base = items.filter(h => (cfHist.empresa === 'todas' || h.cliente === cfHist.empresa) && (cfHist.mes === 'todos' || cfHistMes(h.cuando) === cfHist.mes) &&
+    (!q || cfNormalizar([h.folio, h.cliente, h.sede, h.rfc, h.correo ? (h.correo.para || []).join(' ') + ' ' + h.correo.asunto : '', h.wa ? (h.wa.para || []).join(' ') : ''].join(' ')).indexOf(q) !== -1));
+  const cuenta = {}; CF_HIST_RES_ORDEN.forEach(k => { cuenta[k] = base.filter(h => h.resultado === k).length; });
+  const lista = cfHist.filtro === 'todos' ? base : base.filter(h => h.resultado === cfHist.filtro);
+  const chips = [['todos', 'Todos', base.length]].concat(CF_HIST_RES_ORDEN.filter(k => cuenta[k] || cfHist.filtro === k).map(k => [k, CF_HIST_RES[k].filtro, cuenta[k]]))
+    .map(f => '<button type="button" onclick="cfHistSetFiltro(\'' + f[0] + '\')" class="px-3 py-1.5 rounded-full text-xs font-label font-semibold ring-1 ring-inset ' + (cfHist.filtro === f[0] ? 'ring-primary bg-primary text-on-primary' : 'ring-outline-variant/50 bg-surface-container-lowest text-on-surface') + '">' + f[1] + ' <span class="font-bold">' + f[2] + '</span></button>').join('');
+  const sel = cfHist.sel ? lista.find(h => h.id === cfHist.sel) || null : null;
+  if (cfHist.sel && !sel) cfHist.sel = null;
+  const aviso = cfHist.aviso ? '<div class="rounded-xl bg-amber-100 text-amber-800 text-sm px-4 py-3 mb-4 flex items-start gap-2"><span class="material-symbols-outlined text-[18px] mt-0.5">warning</span><span>' + cfEsc(cfHist.aviso) + '</span></div>' : '';
+  const filas = lista.map(h => {
+    const R = CF_HIST_RES[h.resultado] || CF_HIST_RES.simulada;
+    return '<tr onclick="cfHistSeleccionar(\'' + h.id + '\')" class="cursor-pointer border-t border-outline-variant/30 hover:bg-surface-container-low ' + (cfHist.sel === h.id ? 'bg-primary-container/40' : '') + '">' +
+      '<td class="px-4 py-3 whitespace-nowrap text-xs text-on-surface-variant">' + cfEsc(cfFecha(h.cuando)) + '<br>' + cfEsc(cfHora(h.cuando)) + '</td>' +
+      '<td class="px-4 py-3"><div class="font-mono text-sm font-bold">' + cfEsc(h.folio) + '</div><div class="text-xs text-on-surface-variant">' + cfEsc(cfDinero(h.total)) + '</div></td>' +
+      '<td class="px-4 py-3 text-sm"><div class="font-semibold">' + cfEsc(h.cliente) + '</div>' + (h.sede ? '<div class="text-xs text-on-surface-variant">' + cfEsc(h.sede) + '</div>' : '') + '</td>' +
+      '<td class="px-4 py-3"><div class="flex flex-wrap gap-1.5">' + cfHistCanales(h) + '</div></td>' +
+      '<td class="px-4 py-3"><span class="rounded-full px-3 py-1 text-[11px] font-label font-bold uppercase ' + R.chip + '">' + R.txt + '</span><div class="text-[11px] text-on-surface-variant mt-1">' + (h.modo === 'real' ? 'Real' : h.modo === 'a_mano' ? 'A mano' : 'Simulado') + (h.guardado ? '' : ' · sin guardar') + '</div></td></tr>';
+  }).join('');
+  const tabla = lista.length
+    ? '<div class="overflow-x-auto"><table class="w-full text-left"><thead class="bg-surface-container-low text-[10px] font-label uppercase tracking-widest text-on-surface-variant"><tr><th class="px-4 py-3">Fecha</th><th class="px-4 py-3">Factura</th><th class="px-4 py-3">Cliente</th><th class="px-4 py-3">Canales</th><th class="px-4 py-3">Resultado</th></tr></thead><tbody>' + filas + '</tbody></table></div>'
+    : '<div class="px-6 py-14 text-center text-on-surface-variant"><span class="material-symbols-outlined text-[36px]">history</span><div class="font-headline text-lg font-semibold text-on-surface mt-1">' + (cfHist.cargando ? 'Cargando…' : (items.length ? 'Ningún envío coincide con los filtros' : 'Aún no hay envíos')) + '</div>' +
+      (items.length || cfHist.cargando ? '' : '<p class="text-sm mt-1">Cada vez que envíes, simules o entregues a mano una factura quedará aquí, con el correo tal como salió.</p>') + '</div>';
+  cont.innerHTML = aviso +
+    '<div class="flex items-center gap-2 flex-wrap mb-3">' +
+      '<div class="relative flex-1 min-w-[220px] max-w-sm"><span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-on-surface-variant">search</span>' +
+      '<input id="cfh-buscar" type="text" value="' + cfEsc(cfHist.texto) + '" oninput="cfHistFiltrarTexto(this.value)" placeholder="Buscar folio, cliente, RFC o correo…" autocomplete="off" class="w-full pl-9 pr-3 py-2.5 rounded-xl bg-surface-container-low text-sm text-on-surface outline-none focus:ring-2 focus:ring-primary/40"></div>' +
+      '<select id="cfh-empresa" onchange="cfHistSetEmpresa(this.value)" class="bg-surface-container-low rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/40"><option value="todas">Todas las empresas</option>' + empresas.map(x => '<option value="' + cfEsc(x) + '"' + (cfHist.empresa === x ? ' selected' : '') + '>' + cfEsc(x) + '</option>').join('') + '</select>' +
+      '<select id="cfh-mes" onchange="cfHistSetMes(this.value)" class="bg-surface-container-low rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/40"><option value="todos">Todos los meses</option>' + meses.map(x => '<option value="' + x + '"' + (cfHist.mes === x ? ' selected' : '') + '>' + cfEsc(cfHistMesTxt(x)) + '</option>').join('') + '</select>' +
+      '<div class="flex items-center gap-1.5 flex-wrap">' + chips + '</div>' +
+      '<button type="button" onclick="cfHistCargar()" aria-label="Actualizar historial" title="Actualizar" class="ml-auto p-2 rounded-xl bg-surface-container-high hover:bg-surface-container-highest"><span class="material-symbols-outlined text-[20px]' + (cfHist.cargando ? ' animate-spin' : '') + '">' + (cfHist.cargando ? 'progress_activity' : 'refresh') + '</span></button></div>' +
+    '<div class="grid gap-4 items-start ' + (sel ? 'xl:grid-cols-[minmax(0,1fr)_480px]' : '') + '">' +
+      '<div class="bg-surface-container-lowest rounded-2xl shadow-sm overflow-hidden min-w-0">' + tabla + (lista.length ? '<div class="px-4 py-3 border-t border-outline-variant/30 text-xs text-on-surface-variant">Mostrando <strong>' + lista.length + '</strong> de <strong>' + items.length + '</strong> envíos</div>' : '') + '</div>' +
+      (sel ? '<aside class="bg-surface-container-lowest rounded-2xl shadow-sm p-5 min-w-0">' + cfHistDetalle(sel) + '</aside>' : '') + '</div>';
+  if (refoco) { const inp = cfSimEl('cfh-buscar'); if (inp) { inp.focus(); try { inp.setSelectionRange(pos, pos); } catch (_) {} } }
+}
+
 document.addEventListener('keydown', function (ev) {
   if (ev.key !== 'Escape' || !cfRev) return;
   const doc = cfSimEl('modal-cf-doc');
@@ -11837,10 +12063,12 @@ let cfBancoTimer = null;
 function cfAplicarVista() {
   const b = document.getElementById('cf-vista-banco');
   const e = document.getElementById('cf-vista-envios');
-  if (!b || !e) return;
+  const hi = document.getElementById('cf-vista-historial');
+  if (!b || !e || !hi) return;
   b.classList.toggle('hidden', cfVista !== 'banco');
   e.classList.toggle('hidden', cfVista !== 'envios');
-  [['banco', 'cf-tab-banco'], ['envios', 'cf-tab-envios']].forEach(p => {
+  hi.classList.toggle('hidden', cfVista !== 'historial');
+  [['banco', 'cf-tab-banco'], ['envios', 'cf-tab-envios'], ['historial', 'cf-tab-historial']].forEach(p => {
     const t = document.getElementById(p[1]);
     if (!t) return;
     t.className = 'flex items-center gap-1.5 px-4 py-2 rounded-xl font-label text-sm font-semibold ' +
@@ -11848,7 +12076,7 @@ function cfAplicarVista() {
     t.setAttribute('aria-selected', cfVista === p[0] ? 'true' : 'false');
   });
 }
-function cfCambiarVista(v) { cfVista = v; cfAplicarVista(); }
+function cfCambiarVista(v) { cfVista = v; cfAplicarVista(); if (v === 'historial') { cfHistRender(); cfHistCargar(); } }
 
 function cfBancoFiltrarTexto(v) { cfBancoTexto = v || ''; cfRenderBanco(); }
 function cfBancoFiltrarCategoria(v) { cfBancoCategoria = v; cfRenderBanco(); }
